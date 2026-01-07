@@ -12,6 +12,7 @@ yarn-error.log*
 .env.test
 .env.production
 
+
 # Next.js
 .next/
 .out/
