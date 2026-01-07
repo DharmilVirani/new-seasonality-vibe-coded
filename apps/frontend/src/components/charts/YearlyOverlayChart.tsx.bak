@@ -1,0 +1,137 @@
+'use client';
+
+import { useMemo } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
+import { ChartWrapper } from './ChartWrapper';
+import type { ChartConfig, ReturnData } from './types';
+import { yearColors } from './types';
+
+interface YearlyOverlayChartProps {
+  data: Record<string, ReturnData[]>;
+  symbol: string;
+  overlayType: 'CalendarDays' | 'TradingDays';
+  config?: ChartConfig;
+  highlightCurrentYear?: boolean;
+}
+
+export function YearlyOverlayChart({
+  data,
+  symbol,
+  overlayType,
+  config = {},
+  highlightCurrentYear = true,
+}: YearlyOverlayChartProps) {
+  const years = Object.keys(data).sort();
+  const currentYear = new Date().getFullYear().toString();
+  const maxDays = overlayType === 'CalendarDays' ? 365 : 252;
+
+  // Transform data for recharts - create array with dayNumber and each year's cumulative return
+  const chartData = useMemo(() => {
+    const result: Array<{ dayNumber: number; [year: string]: number }> = [];
+    
+    for (let day = 1; day <= maxDays; day++) {
+      const point: { dayNumber: number; [year: string]: number } = { dayNumber: day };
+      
+      years.forEach((year) => {
+        const yearData = data[year];
+        if (yearData && yearData[day - 1]) {
+          point[year] = yearData[day - 1].cumulativeReturn || 0;
+        }
+      });
+      
+      result.push(point);
+    }
+    
+    return result;
+  }, [data, years, maxDays]);
+
+  const chartConfig: ChartConfig = {
+    title: `${symbol} - Yearly Overlay (${overlayType})`,
+    subtitle: `Comparing ${years.length} years`,
+    height: 600,
+    ...config,
+  };
+
+  return (
+    <ChartWrapper config={chartConfig}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis
+            dataKey="dayNumber"
+            type="number"
+            domain={[1, maxDays]}
+            tick={{ fontSize: 10 }}
+            label={{
+              value: overlayType === 'CalendarDays' ? 'Calendar Day' : 'Trading Day',
+              position: 'bottom',
+              offset: 0,
+            }}
+          />
+          <YAxis
+            tick={{ fontSize: 10 }}
+            tickFormatter={(v) => `${v.toFixed(1)}%`}
+            label={{
+              value: 'Cumulative Return %',
+              angle: -90,
+              position: 'insideLeft',
+            }}
+          />
+          <Tooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              return (
+                <div className="bg-card border rounded-lg p-3 shadow-lg max-h-64 overflow-y-auto">
+                  <p className="font-medium mb-2">Day {label}</p>
+                  <div className="space-y-1 text-sm">
+                    {payload
+                      .filter((p) => p.value !== undefined)
+                      .sort((a, b) => (b.value as number) - (a.value as number))
+                      .map((p, idx) => (
+                        <div key={idx} className="flex justify-between gap-4">
+                          <span style={{ color: p.color }}>{p.name}</span>
+                          <span className={p.value as number >= 0 ? 'text-green-600' : 'text-red-600'}>
+                            {(p.value as number)?.toFixed(2)}%
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              );
+            }}
+          />
+          <Legend
+            wrapperStyle={{ paddingTop: 20 }}
+            formatter={(value) => (
+              <span className={value === currentYear ? 'font-bold' : ''}>{value}</span>
+            )}
+          />
+          <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="3 3" />
+          
+          {years.map((year, idx) => (
+            <Line
+              key={year}
+              type="monotone"
+              dataKey={year}
+              stroke={yearColors[idx % yearColors.length]}
+              strokeWidth={highlightCurrentYear && year === currentYear ? 3 : 1.5}
+              dot={false}
+              name={year}
+              strokeDasharray={year === currentYear ? undefined : undefined}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartWrapper>
+  );
+}

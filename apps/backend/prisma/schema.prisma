@@ -1,0 +1,570 @@
+// Seasonality SaaS Database Schema
+// Optimized for TimescaleDB with comprehensive time-series analysis support
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================
+// USER MANAGEMENT & AUTHENTICATION
+// =====================================================
+
+enum UserRole {
+  admin
+  user
+  research
+  trial
+}
+
+enum SubscriptionTier {
+  trial
+  basic
+  premium
+  enterprise
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(user)
+  
+  // Subscription management
+  subscriptionTier    SubscriptionTier @default(trial)
+  subscriptionExpiry  DateTime?
+  isActive           Boolean          @default(true)
+  
+  // Usage tracking
+  apiCallsToday      Int              @default(0)
+  apiCallsThisMonth  Int              @default(0)
+  lastApiCall        DateTime?
+  
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLogin DateTime?
+  
+  // Relationships
+  apiKeys           ApiKey[]
+  uploadBatches     UploadBatch[]
+  userPreferences   UserPreferences?
+  analysisResults   AnalysisResult[]
+  
+  @@index([email])
+  @@index([subscriptionTier])
+  @@index([isActive])
+}
+
+model ApiKey {
+  id          Int      @id @default(autoincrement())
+  keyHash     String   @unique // Hashed API key
+  name        String   // User-friendly name
+  userId      Int
+  
+  // Permissions and limits
+  permissions Json     // Array of permissions
+  rateLimit   Int      @default(1000) // Requests per hour
+  
+  // Usage tracking
+  usageToday  Int      @default(0)
+  totalUsage  Int      @default(0)
+  lastUsed    DateTime?
+  
+  // Status
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([keyHash])
+  @@index([userId])
+  @@index([isActive])
+}
+
+model UserPreferences {
+  id     Int @id @default(autoincrement())
+  userId Int @unique
+  
+  // Default analysis settings
+  defaultTimeframe    String   @default("daily")
+  defaultSymbols      String[] // Array of preferred symbols
+  defaultFilters      Json     // Default filter configurations
+  
+  // UI preferences
+  theme              String   @default("light")
+  chartType          String   @default("candlestick")
+  timezone           String   @default("UTC")
+  
+  // Notification preferences
+  emailNotifications Boolean  @default(true)
+  alertThresholds    Json     // Custom alert configurations
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+// =====================================================
+// MARKET DATA CORE TABLES
+// =====================================================
+
+model Ticker {
+  id          Int      @id @default(autoincrement())
+  symbol      String   @unique
+  name        String?  // Full company/index name
+  sector      String?  // Sector classification (will be populated later from research data)
+  exchange    String?  // Exchange (NSE, BSE, etc.)
+  currency    String   @default("INR")
+  
+  // Metadata
+  isActive    Boolean  @default(true)
+  dataSource  String?  // Source of data
+  
+  // Statistics (updated periodically)
+  totalRecords     Int      @default(0)
+  firstDataDate    DateTime?
+  lastDataDate     DateTime?
+  lastUpdated      DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships - Current Implementation
+  seasonalityData  SeasonalityData[]  // Current: OHLCV + OpenInterest only
+  
+  // Relationships - Future Implementation (Research Team Uploads)
+  weeklySeasonalityData   WeeklySeasonalityData[]
+  monthlySeasonalityData  MonthlySeasonalityData[]
+  yearlySeasonalityData   YearlySeasonalityData[]
+  
+  @@index([symbol])
+  @@index([isActive])
+  @@index([sector])
+  @@index([exchange])
+}
+
+// =====================================================
+// TIME-SERIES DATA TABLES (Optimized for TimescaleDB)
+// PHASE 1: Current Implementation - OHLCV + OpenInterest only
+// PHASE 2: Future Implementation - Research team uploads with calculated fields
+// =====================================================
+
+// PHASE 1: Current Implementation - Basic OHLCV Data from daily.csv files
+model SeasonalityData {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date
+  tickerId Int
+  
+  // OHLCV data (migrated from daily.csv files)
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float    @default(0)
+  openInterest Float    @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId])
+  @@index([date])
+  @@index([tickerId])
+  @@index([tickerId, date])
+  @@index([date, tickerId]) // For time-series queries
+}
+
+// PHASE 2: Future Implementation - Research Team Uploads with Calculated Fields
+
+// Weekly Seasonality Data (from research team's seasonality.csv uploads)
+model WeeklySeasonalityData {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date // Week start date
+  tickerId Int
+  weekType String   // "monday" or "expiry"
+  
+  // OHLCV data (aggregated from daily data)
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float    @default(0)
+  openInterest Float    @default(0)
+  
+  // Week-specific calculated fields (from research team)
+  weekday              String?
+  weekNumberMonthly    Int?
+  weekNumberYearly     Int?
+  evenWeekNumberMonthly Boolean?
+  evenWeekNumberYearly  Boolean?
+  
+  // Return calculations
+  returnPoints     Float?
+  returnPercentage Float?
+  positiveWeek     Boolean?
+  
+  // Monthly/Yearly context
+  evenMonth            Boolean?
+  monthlyReturnPoints  Float?
+  monthlyReturnPercentage Float?
+  positiveMonth        Boolean?
+  evenYear             Boolean?
+  yearlyReturnPoints   Float?
+  yearlyReturnPercentage Float?
+  positiveYear         Boolean?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId, weekType])
+  @@index([date])
+  @@index([tickerId])
+  @@index([weekType])
+  @@index([tickerId, date, weekType])
+}
+
+// Monthly Seasonality Data (from research team's seasonality.csv uploads)
+model MonthlySeasonalityData {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date // Month start date
+  tickerId Int
+  
+  // OHLCV data (aggregated from daily data)
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float    @default(0)
+  openInterest Float    @default(0)
+  
+  // Month-specific calculated fields (from research team)
+  weekday              String?
+  evenMonth            Boolean?
+  
+  // Return calculations
+  returnPoints     Float?
+  returnPercentage Float?
+  positiveMonth    Boolean?
+  
+  // Yearly context
+  evenYear               Boolean?
+  yearlyReturnPoints     Float?
+  yearlyReturnPercentage Float?
+  positiveYear           Boolean?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId])
+  @@index([date])
+  @@index([tickerId])
+  @@index([tickerId, date])
+}
+
+// Yearly Seasonality Data (from research team's seasonality.csv uploads)
+model YearlySeasonalityData {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date // Year start date
+  tickerId Int
+  
+  // OHLCV data (aggregated from daily data)
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float    @default(0)
+  openInterest Float    @default(0)
+  
+  // Year-specific calculated fields (from research team)
+  weekday      String?
+  evenYear     Boolean?
+  
+  // Return calculations
+  returnPoints     Float?
+  returnPercentage Float?
+  positiveYear     Boolean?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId])
+  @@index([date])
+  @@index([tickerId])
+  @@index([tickerId, date])
+}
+
+// =====================================================
+// CALCULATED FIELDS & ANALYSIS RESULTS
+// Future: Advanced calculations from research team uploads
+// =====================================================
+
+model CalculatedFields {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date
+  tickerId Int
+  timeframe String  // "daily", "weekly", "monthly", "yearly"
+  
+  // Advanced calculated fields (from research team analysis)
+  sma20            Float?
+  sma50            Float?
+  ema20            Float?
+  rsi              Float?
+  macd             Float?
+  bollingerUpper   Float?
+  bollingerLower   Float?
+  
+  // Seasonality-specific calculations
+  seasonalStrength Float?
+  trendDirection   String?
+  volatility       Float?
+  
+  // Custom indicators
+  customIndicators Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Note: No direct ticker relation since this will be populated later
+  // ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId, timeframe])
+  @@index([date])
+  @@index([tickerId])
+  @@index([timeframe])
+  @@index([tickerId, date, timeframe])
+}
+
+model AnalysisResult {
+  id       String   @id @default(cuid())
+  userId   Int
+  
+  // Analysis parameters
+  analysisType String   // "daily", "weekly", "monthly", "yearly", "scenario"
+  symbols      String[] // Array of symbols analyzed
+  filters      Json     // Filter configuration used
+  dateRange    Json     // Start and end dates
+  
+  // Results
+  chartData    Json     // Chart data for visualization
+  statistics   Json     // Statistical summary
+  insights     Json?    // AI-generated insights
+  
+  // Metadata
+  processingTime Int?    // Processing time in milliseconds
+  dataPoints     Int?    // Number of data points analyzed
+  
+  // Caching
+  expiresAt    DateTime?
+  isPublic     Boolean  @default(false)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([analysisType])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+// =====================================================
+// FILE UPLOAD & BATCH PROCESSING
+// =====================================================
+
+enum BatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum FileStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model UploadBatch {
+  id            String      @id @default(cuid())
+  userId        Int
+  
+  // Batch information
+  name          String?     // User-provided batch name
+  description   String?
+  
+  // Processing status
+  status        BatchStatus @default(PENDING)
+  totalFiles    Int
+  processedFiles Int        @default(0)
+  failedFiles   Int         @default(0)
+  
+  // Progress tracking
+  progressPercentage Float   @default(0)
+  currentFile       String?
+  estimatedTimeLeft Int?     // Seconds
+  
+  // Results
+  totalRecordsProcessed Int   @default(0)
+  errorSummary         Json?  // Summary of errors encountered
+  
+  // Metadata
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  startedAt     DateTime?
+  completedAt   DateTime?
+  
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files         UploadedFile[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model UploadedFile {
+  id          Int        @id @default(autoincrement())
+  batchId     String
+  
+  // File information
+  originalName String
+  objectKey    String    // MinIO object key
+  fileSize     Int       // File size in bytes
+  mimeType     String?
+  
+  // Processing status
+  status      FileStatus @default(PENDING)
+  
+  // Processing results
+  recordsProcessed Int      @default(0)
+  recordsSkipped   Int      @default(0)
+  recordsFailed    Int      @default(0)
+  
+  // Error handling
+  errorMessage     String?
+  errorDetails     Json?
+  
+  // Metadata
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  processedAt DateTime?
+  
+  batch       UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  
+  @@index([batchId])
+  @@index([status])
+  @@index([objectKey])
+}
+
+// =====================================================
+// SYSTEM MONITORING & AUDIT
+// =====================================================
+
+model SystemLog {
+  id        Int      @id @default(autoincrement())
+  level     String   // "info", "warn", "error", "debug"
+  message   String
+  context   Json?    // Additional context data
+  userId    Int?     // User associated with the log (if applicable)
+  
+  // Request tracking
+  requestId String?
+  endpoint  String?
+  method    String?
+  
+  // Performance metrics
+  responseTime Int?   // Response time in milliseconds
+  memoryUsage  Int?   // Memory usage in MB
+  
+  createdAt DateTime @default(now())
+  
+  @@index([level])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([requestId])
+}
+
+model DataQualityCheck {
+  id        Int      @id @default(autoincrement())
+  tickerId  Int
+  checkType String   // "missing_data", "outlier", "duplicate", "inconsistency"
+  
+  // Check details
+  dateRange    Json     // Date range checked
+  issuesFound  Int      @default(0)
+  issueDetails Json?    // Detailed information about issues
+  
+  // Resolution
+  isResolved   Boolean  @default(false)
+  resolution   String?  // How the issue was resolved
+  
+  createdAt    DateTime @default(now())
+  resolvedAt   DateTime?
+  
+  @@index([tickerId])
+  @@index([checkType])
+  @@index([isResolved])
+  @@index([createdAt])
+}
+
+// =====================================================
+// PERFORMANCE OPTIMIZATION VIEWS
+// =====================================================
+
+// Note: These will be created as database views after migration
+// They are documented here for reference
+
+// Recent data view (last 2 years) for faster queries
+// CREATE VIEW recent_daily_data AS 
+// SELECT * FROM "DailyData" 
+// WHERE date >= CURRENT_DATE - INTERVAL '2 years';
+
+// Symbol statistics view
+// CREATE MATERIALIZED VIEW symbol_statistics AS
+// SELECT 
+//   t.symbol,
+//   COUNT(dd.id) as total_daily_records,
+//   MIN(dd.date) as first_date,
+//   MAX(dd.date) as last_date,
+//   AVG(dd.close) as avg_close,
+//   STDDEV(dd.returnPercentage) as volatility
+// FROM "Ticker" t
+// LEFT JOIN "DailyData" dd ON t.id = dd.tickerId
+// GROUP BY t.id, t.symbol;
+
+// Performance monitoring view
+// CREATE VIEW query_performance AS
+// SELECT 
+//   schemaname,
+//   tablename,
+//   n_tup_ins,
+//   n_tup_upd,
+//   n_tup_del,
+//   n_live_tup,
+//   n_dead_tup,
+//   last_vacuum,
+//   last_autovacuum,
+//   last_analyze,
+//   last_autoanalyze
+// FROM pg_stat_user_tables;

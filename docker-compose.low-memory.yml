@@ -1,0 +1,91 @@
+# Docker Compose Override for Low Memory Systems (8GB RAM)
+# Use this file for systems with limited resources
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.low-memory.yml up -d
+
+version: '3.9'
+
+services:
+  postgres:
+    environment:
+      # Reduced memory settings for 8GB systems
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 512MB
+      POSTGRES_WORK_MEM: 8MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.75'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  redis:
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru --save 900 1
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+  minio:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  backend:
+    environment:
+      # Reduced worker concurrency for low memory
+      WORKER_CONCURRENCY: 1
+      DB_POOL_SIZE: 5
+      DB_BATCH_SIZE: 500
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  worker:
+    environment:
+      WORKER_CONCURRENCY: 1
+      DB_BATCH_SIZE: 500
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  frontend:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  nginx:
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+        reservations:
+          memory: 32M
+          cpus: '0.05'
