@@ -88,6 +88,12 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
 
+        // Skip if user is already authenticated and token exists
+        const { isAuthenticated, user } = get();
+        if (isAuthenticated && user) {
+          return; // Don't make unnecessary API calls
+        }
+
         try {
           const response = await authApi.me();
           set({ user: response.data.user, isAuthenticated: true });

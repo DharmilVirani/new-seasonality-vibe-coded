@@ -26,12 +26,15 @@ module.exports = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
   
-  // MinIO
+  // MinIO - dual endpoint config
   minio: {
-    endpoint: process.env.MINIO_ENDPOINT || 'localhost',
+    // Internal endpoint for Docker network (worker/backend to MinIO)
+    internalEndpoint: process.env.MINIO_INTERNAL_ENDPOINT || process.env.MINIO_ENDPOINT || 'minio',
+    // External endpoint for browser access (presigned URLs)
+    endpoint: process.env.MINIO_ENDPOINT || '192.168.4.30',
     port: parseInt(process.env.MINIO_PORT || '9000', 10),
-    accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+    accessKey: process.env.MINIO_ACCESS_KEY || 'admin',
+    secretKey: process.env.MINIO_SECRET_KEY || 'admin12345',
     bucket: process.env.MINIO_BUCKET || 'seasonality-uploads',
     useSSL: process.env.MINIO_USE_SSL === 'true',
   },

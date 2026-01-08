@@ -2,7 +2,11 @@
 // Optimized for TimescaleDB with comprehensive time-series analysis support
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native = local dev machine, linux-musl-openssl-3.0.x = Alpine Docker with OpenSSL 3.x
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  // Use library engine for better compatibility
+  engineType    = "library"
 }
 
 datasource db {
@@ -120,6 +124,23 @@ model UserPreferences {
 // MARKET DATA CORE TABLES
 // =====================================================
 
+model GeneratedFile {
+  id          Int      @id @default(autoincrement())
+  tickerId    Int
+  fileType    String   // DAILY, MONDAYWEEKLY, EXPIRYWEEKLY, MONTHLY, YEARLY
+  fileName    String   // 1_Daily.csv, 2_MondayWeekly.csv, etc.
+  objectKey   String   // MinIO object key
+  recordCount Int      @default(0)
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ticker Ticker @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+
+  @@unique([tickerId, fileType])
+  @@map("generated_files")
+}
+
 model Ticker {
   id          Int      @id @default(autoincrement())
   symbol      String   @unique
@@ -142,10 +163,13 @@ model Ticker {
   updatedAt   DateTime @updatedAt
   
   // Relationships - Current Implementation
-  seasonalityData  SeasonalityData[]  // Current: OHLCV + OpenInterest only
+  seasonalityData  SeasonalityData[]  // Raw OHLCV + OpenInterest from admin uploads
+  generatedFiles   GeneratedFile[]    // Generated analysis files (1_Daily.csv, etc.)
   
-  // Relationships - Future Implementation (Research Team Uploads)
-  weeklySeasonalityData   WeeklySeasonalityData[]
+  // Relationships - Calculated Data Tables
+  dailySeasonalityData    DailySeasonalityData[]
+  mondayWeeklyData        MondayWeeklyData[]
+  expiryWeeklyData        ExpiryWeeklyData[]
   monthlySeasonalityData  MonthlySeasonalityData[]
   yearlySeasonalityData   YearlySeasonalityData[]
   
@@ -187,16 +211,15 @@ model SeasonalityData {
   @@index([date, tickerId]) // For time-series queries
 }
 
-// PHASE 2: Future Implementation - Research Team Uploads with Calculated Fields
+// PHASE 2: Calculated Data Tables (populated from SeasonalityData via calculation engine)
 
-// Weekly Seasonality Data (from research team's seasonality.csv uploads)
-model WeeklySeasonalityData {
+// Daily Seasonality Data with ALL calculated fields (from 1_Daily.csv structure)
+model DailySeasonalityData {
   id       Int      @id @default(autoincrement())
-  date     DateTime @db.Date // Week start date
+  date     DateTime @db.Date
   tickerId Int
-  weekType String   // "monday" or "expiry"
   
-  // OHLCV data (aggregated from daily data)
+  // OHLCV data
   open         Float
   high         Float
   low          Float
@@ -204,23 +227,51 @@ model WeeklySeasonalityData {
   volume       Float    @default(0)
   openInterest Float    @default(0)
   
-  // Week-specific calculated fields (from research team)
-  weekday              String?
-  weekNumberMonthly    Int?
-  weekNumberYearly     Int?
-  evenWeekNumberMonthly Boolean?
-  evenWeekNumberYearly  Boolean?
+  // Basic daily fields
+  weekday              String?   // Monday, Tuesday, etc.
+  calendarMonthDay     Int?      // Day of month (1-31)
+  calendarYearDay      Int?      // Day of year (1-366)
+  tradingMonthDay      Int?      // Trading day of month
+  tradingYearDay       Int?      // Trading day of year
   
-  // Return calculations
+  // Even/Odd flags for calendar days
+  evenCalendarMonthDay Boolean?
+  evenCalendarYearDay  Boolean?
+  evenTradingMonthDay  Boolean?
+  evenTradingYearDay   Boolean?
+  
+  // Daily return calculations
   returnPoints     Float?
   returnPercentage Float?
-  positiveWeek     Boolean?
+  positiveDay      Boolean?
   
-  // Monthly/Yearly context
+  // Monday Weekly context
+  mondayWeeklyDate           DateTime? @db.Date
+  mondayWeekNumberMonthly    Int?
+  mondayWeekNumberYearly     Int?
+  evenMondayWeekNumberMonthly Boolean?
+  evenMondayWeekNumberYearly  Boolean?
+  mondayWeeklyReturnPoints   Float?
+  mondayWeeklyReturnPercentage Float?
+  positiveMondayWeek         Boolean?
+  
+  // Expiry Weekly context
+  expiryWeeklyDate           DateTime? @db.Date
+  expiryWeekNumberMonthly    Int?
+  expiryWeekNumberYearly     Int?
+  evenExpiryWeekNumberMonthly Boolean?
+  evenExpiryWeekNumberYearly  Boolean?
+  expiryWeeklyReturnPoints   Float?
+  expiryWeeklyReturnPercentage Float?
+  positiveExpiryWeek         Boolean?
+  
+  // Monthly context
   evenMonth            Boolean?
   monthlyReturnPoints  Float?
   monthlyReturnPercentage Float?
   positiveMonth        Boolean?
+  
+  // Yearly context
   evenYear             Boolean?
   yearlyReturnPoints   Float?
   yearlyReturnPercentage Float?
@@ -231,11 +282,112 @@ model WeeklySeasonalityData {
   
   ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
   
-  @@unique([date, tickerId, weekType])
+  @@unique([date, tickerId])
   @@index([date])
   @@index([tickerId])
-  @@index([weekType])
-  @@index([tickerId, date, weekType])
+  @@index([tickerId, date])
+  @@map("daily_seasonality_data")
+}
+
+// Monday Weekly Seasonality Data (from 2_MondayWeekly.csv structure)
+model MondayWeeklyData {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date // Monday date (week start)
+  tickerId Int
+  
+  // OHLCV data (aggregated from daily data)
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float    @default(0)
+  openInterest Float    @default(0)
+  
+  // Week-specific fields
+  weekday              String?   // Always "Monday"
+  weekNumberMonthly    Int?
+  weekNumberYearly     Int?
+  evenWeekNumberMonthly Boolean?
+  evenWeekNumberYearly  Boolean?
+  
+  // Return calculations
+  returnPoints     Float?
+  returnPercentage Float?
+  positiveWeek     Boolean?
+  
+  // Monthly context
+  evenMonth            Boolean?
+  monthlyReturnPoints  Float?
+  monthlyReturnPercentage Float?
+  positiveMonth        Boolean?
+  
+  // Yearly context
+  evenYear             Boolean?
+  yearlyReturnPoints   Float?
+  yearlyReturnPercentage Float?
+  positiveYear         Boolean?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId])
+  @@index([date])
+  @@index([tickerId])
+  @@index([tickerId, date])
+  @@map("monday_weekly_data")
+}
+
+// Expiry Weekly Seasonality Data (from 3_ExpiryWeekly.csv structure)
+model ExpiryWeeklyData {
+  id       Int      @id @default(autoincrement())
+  date     DateTime @db.Date // Expiry date (typically Thursday/Friday)
+  tickerId Int
+  
+  // OHLCV data (aggregated from daily data)
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float    @default(0)
+  openInterest Float    @default(0)
+  
+  // Week-specific fields
+  weekday              String?   // Day of expiry
+  startDate            DateTime? @db.Date // Week start date
+  weekNumberMonthly    Int?
+  weekNumberYearly     Int?
+  evenWeekNumberMonthly Boolean?
+  evenWeekNumberYearly  Boolean?
+  
+  // Return calculations
+  returnPoints     Float?
+  returnPercentage Float?
+  positiveWeek     Boolean?
+  
+  // Monthly context
+  evenMonth            Boolean?
+  monthlyReturnPoints  Float?
+  monthlyReturnPercentage Float?
+  positiveMonth        Boolean?
+  
+  // Yearly context
+  evenYear             Boolean?
+  yearlyReturnPoints   Float?
+  yearlyReturnPercentage Float?
+  positiveYear         Boolean?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  ticker    Ticker   @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+  
+  @@unique([date, tickerId])
+  @@index([date])
+  @@index([tickerId])
+  @@index([tickerId, date])
+  @@map("expiry_weekly_data")
 }
 
 // Monthly Seasonality Data (from research team's seasonality.csv uploads)
@@ -276,6 +428,7 @@ model MonthlySeasonalityData {
   @@index([date])
   @@index([tickerId])
   @@index([tickerId, date])
+  @@map("monthly_seasonality_data")
 }
 
 // Yearly Seasonality Data (from research team's seasonality.csv uploads)
@@ -310,6 +463,7 @@ model YearlySeasonalityData {
   @@index([date])
   @@index([tickerId])
   @@index([tickerId, date])
+  @@map("yearly_seasonality_data")
 }
 
 // =====================================================

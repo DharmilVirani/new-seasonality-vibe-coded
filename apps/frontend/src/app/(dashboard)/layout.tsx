@@ -12,19 +12,23 @@ export default function DashboardRootLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isAuthenticated, checkAuth } = useAuthStore();
+  const { isAuthenticated, user, checkAuth } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
-  // For demo purposes, allow access without auth
-  // In production, uncomment the redirect
-  // useEffect(() => {
-  //   if (!isAuthenticated) {
-  //     router.push('/login');
-  //   }
-  // }, [isAuthenticated, router]);
+  // Redirect admin users to admin panel - they should not see dashboard
+  useEffect(() => {
+    if (isAuthenticated && user?.role === 'admin') {
+      router.push('/admin');
+    }
+  }, [isAuthenticated, user, router]);
+
+  // If admin, show loading while redirecting
+  if (user?.role === 'admin') {
+    return <LoadingPage />;
+  }
 
   return <DashboardLayout>{children}</DashboardLayout>;
 }

@@ -7,7 +7,7 @@ const API_BASE_URL = baseUrl.startsWith('http') ? `${baseUrl}/api` : '/api';
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 300000, // 5 minutes for large uploads
   headers: {
     'Content-Type': 'application/json',
   },
@@ -98,6 +98,7 @@ export const analysisApi = {
 
 // Upload API
 export const uploadApi = {
+  // Standard batch upload
   createBatch: (formData: FormData) =>
     api.post('/upload/batch', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -105,6 +106,18 @@ export const uploadApi = {
   listBatches: () => api.get('/upload/batches'),
   getBatch: (batchId: string) => api.get(`/upload/batches/${batchId}`),
   processBatch: (batchId: string) => api.post(`/upload/batches/${batchId}/process`),
+  deleteBatch: (batchId: string) => api.delete(`/upload/batches/${batchId}`),
+  
+  // Bulk upload (for large file batches)
+  getPresignedUrls: (files: { name: string; size: number }[]) =>
+    api.post('/upload/bulk/presign', { files }),
+  processBulk: (batchId: string, objectKeys: string[], fileNames: string[]) =>
+    api.post('/upload/bulk/process', { batchId, objectKeys, fileNames }),
+  getBulkStatus: (batchId: string) => api.get(`/upload/bulk/${batchId}/status`),
+  retryBulk: (batchId: string) => api.post(`/upload/bulk/${batchId}/retry`),
+  
+  // Stats
+  getStats: () => api.get('/upload/stats'),
 };
 
 export default api;
@@ -134,4 +147,103 @@ export interface YearlyAnalysisParams {
   startDate: string;
   endDate: string;
   overlayType?: 'CalendarDays' | 'TradingDays';
+}
+
+export interface ScenarioParams {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  entryDay?: string;
+  exitDay?: string;
+  entryType?: 'Open' | 'Close';
+  exitType?: 'Open' | 'Close';
+  tradeType?: 'Long' | 'Short';
+  returnType?: 'Percent' | 'Points';
+}
+
+export interface ScannerParams {
+  symbols?: string[];
+  startDate: string;
+  endDate: string;
+  filters?: FilterConfig;
+  trendType?: string;
+  consecutiveDays?: number;
+  criteria?: Record<string, unknown>;
+}
+
+export interface BacktestParams {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  positionSize?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+}
+
+export interface PhenomenaParams {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  phenomenaType?: string;
+  threshold?: number;
+  percentChange?: number;
+}
+
+export interface BasketParams {
+  symbols: string[];
+  startDate: string;
+  endDate: string;
+  weights?: Record<string, number>;
+}
+
+export interface ChartParams {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  chartType?: string;
+}
+
+export interface FilterConfig {
+  yearFilters?: YearFilters;
+  monthFilters?: MonthFilters;
+  weekFilters?: WeekFilters;
+  dayFilters?: DayFilters;
+  outlierFilters?: OutlierFilters;
+}
+
+interface YearFilters {
+  positiveNegativeYears?: 'All' | 'Positive' | 'Negative';
+  evenOddYears?: 'All' | 'Even' | 'Odd' | 'Leap' | 'Election';
+  decadeYears?: number[];
+  specificYears?: number[];
+}
+
+interface MonthFilters {
+  positiveNegativeMonths?: 'All' | 'Positive' | 'Negative';
+  evenOddMonths?: 'All' | 'Even' | 'Odd';
+  specificMonth?: number;
+}
+
+interface WeekFilters {
+  weekType?: 'monday' | 'expiry';
+  positiveNegativeWeeks?: 'All' | 'Positive' | 'Negative';
+  evenOddWeeksMonthly?: 'All' | 'Even' | 'Odd';
+  evenOddWeeksYearly?: 'All' | 'Even' | 'Odd';
+  specificWeekMonthly?: number;
+}
+
+interface DayFilters {
+  positiveNegativeDays?: 'All' | 'Positive' | 'Negative';
+  weekdays?: string[];
+  evenOddCalendarDaysMonthly?: 'All' | 'Even' | 'Odd';
+  evenOddCalendarDaysYearly?: 'All' | 'Even' | 'Odd';
+  evenOddTradingDaysMonthly?: 'All' | 'Even' | 'Odd';
+  evenOddTradingDaysYearly?: 'All' | 'Even' | 'Odd';
+}
+
+interface OutlierFilters {
+  dailyPercentageRange?: { enabled: boolean; min: number; max: number };
+  weeklyPercentageRange?: { enabled: boolean; min: number; max: number };
+  monthlyPercentageRange?: { enabled: boolean; min: number; max: number };
+  yearlyPercentageRange?: { enabled: boolean; min: number; max: number };
 }

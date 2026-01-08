@@ -291,7 +291,7 @@ Complete Next.js 14 frontend with all 11 analysis tabs:
 - ✅ **11 Analysis Tabs** - Daily, Weekly, Monthly, Yearly, Scenario, Election, Scanner, Backtester, Phenomena, Basket, Charts
 - ✅ **Filter Components** - Symbol, Date, Year, Month, Week, Day, Outlier filters
 - ✅ **Chart Components** - Complete visualization library (see below)
-- ✅ **Admin Panel** - CSV upload interface
+- ✅ **Admin Panel** - Bulk CSV upload with MinIO presigned URLs, progress tracking, retry failed files
 
 ### Chart & Visualization Library - COMPLETED ✅
 - ✅ **ChartWrapper** - Base wrapper with controls (refresh, export, fullscreen)

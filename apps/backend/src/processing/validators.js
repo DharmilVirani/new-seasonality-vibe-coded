@@ -7,17 +7,27 @@
  * Required columns for different CSV types
  */
 const REQUIRED_COLUMNS = {
-  daily: ['date', 'open', 'high', 'low', 'close'],
+  daily: ['date', 'close'],  // Minimal requirements - ticker can be from filename
   ohlcv: ['date', 'open', 'high', 'low', 'close', 'volume'],
-  seasonality: ['date', 'symbol', 'open', 'high', 'low', 'close'],
+  seasonality: ['date', 'ticker', 'close'],  // Ticker required for multi-symbol files
+  minimal: ['date', 'close'],  // Absolute minimum
 };
 
 /**
  * Optional columns that may be present
  */
 const OPTIONAL_COLUMNS = [
-  'ticker', 'symbol', 'volume', 'openinterest', 'oi', 'name',
+  'ticker', 'symbol', 'open', 'high', 'low', 'volume', 'openinterest', 'oi', 'name',
   'weekday', 'returnpoints', 'returnpercentage',
+];
+
+/**
+ * Supported date formats description
+ */
+const SUPPORTED_DATE_FORMATS = [
+  'DD-MM-YYYY (e.g., 25-12-2024)',
+  'DD/MM/YYYY (e.g., 25/12/2024)',
+  'YYYY-MM-DD (e.g., 2024-12-25)',
 ];
 
 /**
@@ -49,17 +59,27 @@ function normalizeColumnName(columnName) {
  * Validate that required columns are present
  * @param {Array<string>} headers - CSV headers
  * @param {string} type - CSV type ('daily', 'ohlcv', 'seasonality')
- * @returns {Object} { valid, missingColumns, normalizedHeaders }
+ * @returns {Object} { valid, missingColumns, normalizedHeaders, errorMessage }
  */
 function validateRequiredColumns(headers, type = 'daily') {
   const normalizedHeaders = headers.map(normalizeColumnName);
   const required = REQUIRED_COLUMNS[type] || REQUIRED_COLUMNS.daily;
   const missingColumns = required.filter(col => !normalizedHeaders.includes(col));
 
+  let errorMessage = null;
+  if (missingColumns.length > 0) {
+    errorMessage = `Missing required columns: ${missingColumns.join(', ')}. ` +
+      `Required columns are: ${required.join(', ')}. ` +
+      `Optional columns: Open, High, Low, Volume, OpenInterest. ` +
+      `Supported date formats: ${SUPPORTED_DATE_FORMATS.join(', ')}`;
+  }
+
   return {
     valid: missingColumns.length === 0,
     missingColumns,
     normalizedHeaders,
+    errorMessage,
+    foundColumns: normalizedHeaders,
   };
 }
 
@@ -344,6 +364,7 @@ module.exports = {
   REQUIRED_COLUMNS,
   OPTIONAL_COLUMNS,
   COLUMN_ALIASES,
+  SUPPORTED_DATE_FORMATS,
   normalizeColumnName,
   validateRequiredColumns,
   validateRow,

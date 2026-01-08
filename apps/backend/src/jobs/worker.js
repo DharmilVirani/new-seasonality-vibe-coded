@@ -3,6 +3,8 @@
  * Background job processor for CSV uploads and heavy computations
  * 
  * Uses the new processing pipeline from src/processing/
+ * 
+ * Run with: npm run worker
  */
 require('dotenv').config();
 
@@ -55,6 +57,12 @@ function startAllWorkers() {
 
 // Start workers if running as main process
 if (require.main === module) {
+  console.log('========================================');
+  console.log('CSV Processor Worker Started');
+  console.log(`Redis: ${config.redis.host}:${config.redis.port}`);
+  console.log(`Queues: ${Object.values(QUEUE_NAMES).join(', ')}`);
+  console.log('========================================');
+  
   const workers = startAllWorkers();
   
   // Graceful shutdown

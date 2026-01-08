@@ -12,47 +12,44 @@ const { normalizeColumnName } = require('./validators');
  * @returns {Date|null}
  */
 function parseDate(dateStr) {
-  if (!dateStr) return null;
-
-  // Try common formats
-  const formats = [
-    // ISO format
-    /^(\d{4})-(\d{2})-(\d{2})$/,
-    // DD-MM-YYYY
-    /^(\d{2})-(\d{2})-(\d{4})$/,
-    // DD/MM/YYYY
-    /^(\d{2})\/(\d{2})\/(\d{4})$/,
-    // MM/DD/YYYY
-    /^(\d{2})\/(\d{2})\/(\d{4})$/,
-    // YYYY/MM/DD
-    /^(\d{4})\/(\d{2})\/(\d{2})$/,
-  ];
+  if (!dateStr || dateStr.trim() === '') {
+    return null;
+  }
 
   const str = dateStr.trim();
 
-  // Try ISO format first
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-    const date = new Date(str);
-    if (!isNaN(date.getTime())) return date;
-  }
-
-  // Try DD-MM-YYYY format (common in Indian data)
-  const ddmmyyyy = str.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  // Handle DD-MM-YYYY format (e.g., 24-12-2024)
+  const ddmmyyyy = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (ddmmyyyy) {
     const [, day, month, year] = ddmmyyyy;
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const d = parseInt(day), m = parseInt(month), y = parseInt(year);
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1900 && y <= 2100) {
+      return new Date(Date.UTC(y, m - 1, d));
+    }
   }
 
-  // Try DD/MM/YYYY format
-  const ddmmyyyySlash = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  // Handle DD/MM/YYYY format (e.g., 24/12/2024)
+  const ddmmyyyySlash = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (ddmmyyyySlash) {
     const [, day, month, year] = ddmmyyyySlash;
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const d = parseInt(day), m = parseInt(month), y = parseInt(year);
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1900 && y <= 2100) {
+      return new Date(Date.UTC(y, m - 1, d));
+    }
   }
 
-  // Fallback to native Date parsing
-  const date = new Date(str);
-  return isNaN(date.getTime()) ? null : date;
+  // Handle YYYY-MM-DD format (ISO format)
+  const yyyymmdd = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (yyyymmdd) {
+    const [, year, month, day] = yyyymmdd;
+    const d = parseInt(day), m = parseInt(month), y = parseInt(year);
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1900 && y <= 2100) {
+      return new Date(Date.UTC(y, m - 1, d));
+    }
+  }
+
+  // NO FALLBACK - strict date parsing only
+  return null;
 }
 
 /**
@@ -104,13 +101,15 @@ function transformRow(rawRow, headers) {
   }
 
   // Parse and validate specific fields
+  const close = parseNumber(normalized.close);
+  
   return {
     date: parseDate(normalized.date),
     symbol: (normalized.symbol || normalized.ticker || '').toUpperCase().trim(),
-    open: parseNumber(normalized.open),
-    high: parseNumber(normalized.high),
-    low: parseNumber(normalized.low),
-    close: parseNumber(normalized.close),
+    open: parseNumber(normalized.open) || close,  // Default to close if missing
+    high: parseNumber(normalized.high) || close,  // Default to close if missing
+    low: parseNumber(normalized.low) || close,    // Default to close if missing
+    close: close,
     volume: parseNumber(normalized.volume, 0),
     openInterest: parseNumber(normalized.openInterest || normalized.oi, 0),
     // Preserve any additional fields
@@ -156,11 +155,11 @@ function transformDataset(rawData, headers, options = {}) {
         row.symbol = defaultSymbol;
       }
 
-      // Validate OHLC
-      if (row.open <= 0 || row.high <= 0 || row.low <= 0 || row.close <= 0) {
+      // Validate close price (required)
+      if (!row.close || row.close <= 0) {
         if (skipInvalid) {
           skipped++;
-          errors.push({ row: i + 1, error: 'Invalid OHLC values' });
+          errors.push({ row: i + 1, error: 'Invalid or missing close price' });
           continue;
         }
       }

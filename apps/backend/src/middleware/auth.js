@@ -1,6 +1,6 @@
 /**
  * Authentication Middleware
- * JWT-based authentication with API key support
+ * JWT-based authentication with API key support and caching
  */
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -9,8 +9,43 @@ const config = require('../config');
 const { AuthenticationError, AuthorizationError } = require('../utils/errors');
 const { logger } = require('../utils/logger');
 
+// Simple in-memory cache for user data (5 minute TTL)
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Verify JWT token from Authorization header
+ * Get user from cache or database
+ */
+const getCachedUser = async (userId) => {
+  const cacheKey = `user:${userId}`;
+  const cached = userCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.user;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      subscriptionTier: true,
+      subscriptionExpiry: true,
+      isActive: true,
+    },
+  });
+
+  if (user) {
+    userCache.set(cacheKey, { user, timestamp: Date.now() });
+  }
+
+  return user;
+};
+
+/**
+ * Verify JWT token from Authorization header (optimized)
  */
 const authenticateToken = async (req, res, next) => {
   try {
@@ -30,18 +65,8 @@ const authenticateToken = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, config.jwt.secret);
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        subscriptionTier: true,
-        subscriptionExpiry: true,
-        isActive: true,
-      },
-    });
+    // Use cached user lookup
+    const user = await getCachedUser(decoded.userId);
 
     if (!user || !user.isActive) {
       throw new AuthenticationError('User not found or inactive');

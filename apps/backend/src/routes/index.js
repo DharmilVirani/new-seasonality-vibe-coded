@@ -9,6 +9,7 @@ const authRoutes = require('./authRoutes');
 const userRoutes = require('./userRoutes');
 const analysisRoutes = require('./analysisRoutes');
 const uploadRoutes = require('./uploadRoutes');
+const filesRoutes = require('./filesRoutes');
 
 // Health check
 router.get('/health', (req, res) => {
@@ -30,6 +31,7 @@ router.get('/', (req, res) => {
       users: '/api/users',
       analysis: '/api/analysis',
       upload: '/api/upload',
+      files: '/api/files',
     },
     documentation: '/api/docs',
   });
@@ -40,5 +42,6 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/analysis', analysisRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/files', filesRoutes);
 
 module.exports = router;

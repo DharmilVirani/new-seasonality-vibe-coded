@@ -281,7 +281,7 @@ class AuthService {
   }
 
   /**
-   * Get current user profile
+   * Get current user profile (optimized)
    */
   async getProfile(userId) {
     const user = await prisma.user.findUnique({
@@ -297,7 +297,7 @@ class AuthService {
         apiCallsThisMonth: true,
         lastLogin: true,
         createdAt: true,
-        userPreferences: true,
+        // Remove userPreferences to reduce query time
       },
     });
 
@@ -405,9 +405,16 @@ class AuthService {
   }
 
   /**
-   * Log audit event
+   * Log audit event (optimized - only for critical events)
    */
   async logAuditEvent(eventType, userId, details) {
+    // Only log critical events to reduce database load
+    const criticalEvents = ['USER_REGISTERED', 'USER_LOGIN', 'PASSWORD_CHANGED', 'FAILED_LOGIN'];
+    
+    if (!criticalEvents.includes(eventType)) {
+      return; // Skip non-critical events
+    }
+
     try {
       await prisma.systemLog.create({
         data: {

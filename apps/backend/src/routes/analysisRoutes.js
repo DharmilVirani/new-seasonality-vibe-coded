@@ -1,283 +1,69 @@
 /**
  * Analysis Routes
- * API endpoints for all 11 analysis modules
+ * API endpoints for accessing calculated seasonality data
+ * Updated for new schema with separate tables:
+ * - DailySeasonalityData
+ * - MondayWeeklyData
+ * - ExpiryWeeklyData
+ * - MonthlySeasonalityData
+ * - YearlySeasonalityData
  */
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, optionalAuth, requireSubscription } = require('../middleware/auth');
-const { dynamicRateLimiter } = require('../middleware/rateLimit');
-const { 
-  validate, 
-  dailyAnalysisSchema, 
-  weeklyAnalysisSchema,
-  monthlyAnalysisSchema,
-  yearlyAnalysisSchema,
-  scannerRequestSchema,
-  scenarioRequestSchema,
-  paginationSchema,
-} = require('../middleware/validation');
-const AnalysisService = require('../services/AnalysisService');
+const prisma = require('../utils/prisma');
 const { logger } = require('../utils/logger');
-
-// Apply authentication and rate limiting to all routes
-router.use(authenticateToken);
-router.use(dynamicRateLimiter);
-
-// =====================================================
-// SYMBOL ENDPOINTS
-// =====================================================
+const { authenticateToken } = require('../middleware/auth');
+const { NotFoundError, ValidationError } = require('../utils/errors');
 
 /**
  * GET /analysis/symbols
- * Get all available symbols
+ * List all available symbols with data
  */
-router.get('/symbols', async (req, res, next) => {
-  try {
-    const tickers = await AnalysisService.getAllTickers();
-    
-    res.json({
-      success: true,
-      count: tickers.length,
-      symbols: tickers.map(t => ({
-        symbol: t.symbol,
-        name: t.name,
-        sector: t.sector,
-        exchange: t.exchange,
-        totalRecords: t.totalRecords,
-        dateRange: {
-          first: t.firstDataDate,
-          last: t.lastDataDate,
-        },
-      })),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * GET /analysis/symbols/:symbol
- * Get symbol details and recent performance
- */
-router.get('/symbols/:symbol', async (req, res, next) => {
-  try {
-    const { symbol } = req.params;
-    const ticker = await AnalysisService.getTickerBySymbol(symbol);
-    const performance = await AnalysisService.getRecentPerformance(symbol);
-
-    res.json({
-      success: true,
-      ticker,
-      performance,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 1. DAILY ANALYSIS
-// =====================================================
-
-/**
- * POST /analysis/daily
- * Daily timeframe analysis with comprehensive filters
- */
-router.post('/daily', validate(dailyAnalysisSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const result = await AnalysisService.getDailyAnalysis(req.body);
-    
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * POST /analysis/daily/aggregate
- * Aggregate daily data by field (trading day, weekday, etc.)
- */
-router.post('/daily/aggregate', validate(dailyAnalysisSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const { aggregateType = 'total', aggregateField = 'TradingMonthDay' } = req.body;
-    
-    const result = await AnalysisService.getDailyAnalysis({
-      ...req.body,
-      aggregateType,
-      aggregateField,
-    });
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 2. WEEKLY ANALYSIS
-// =====================================================
-
-/**
- * POST /analysis/weekly
- * Weekly timeframe analysis (Monday or Expiry based)
- */
-router.post('/weekly', validate(weeklyAnalysisSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    // Weekly analysis uses daily data grouped by week
-    // This will be fully implemented in Phase 2 with WeeklySeasonalityData
-    const result = await AnalysisService.getDailyAnalysis({
-      ...req.body,
-      aggregateField: req.body.weekType === 'expiry' ? 'ExpiryWeekNumberMonthly' : 'WeekNumberMonthly',
-      aggregateType: req.body.aggregateType || 'total',
-    });
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      weekType: req.body.weekType,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 3. MONTHLY ANALYSIS
-// =====================================================
-
-/**
- * POST /analysis/monthly
- * Monthly timeframe analysis
- */
-router.post('/monthly', validate(monthlyAnalysisSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const result = await AnalysisService.getDailyAnalysis({
-      ...req.body,
-      aggregateField: 'month',
-      aggregateType: req.body.aggregateType || 'total',
-    });
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 4. YEARLY ANALYSIS
-// =====================================================
-
-/**
- * POST /analysis/yearly
- * Yearly overlay analysis
- */
-router.post('/yearly', validate(yearlyAnalysisSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const result = await AnalysisService.getYearlyOverlay(req.body);
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 5. SCENARIO ANALYSIS
-// =====================================================
-
-/**
- * POST /analysis/scenario
- * Day-to-day trading scenario analysis
- */
-router.post('/scenario', validate(scenarioRequestSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const result = await AnalysisService.getScenarioAnalysis(req.body);
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 6. ELECTION ANALYSIS
-// =====================================================
-
-/**
- * POST /analysis/election
- * Election cycle impact analysis
- */
-router.post('/election', validate(dailyAnalysisSchema), async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const electionTypes = ['All', 'Election', 'PreElection', 'PostElection', 'MidElection', 'Modi', 'Current'];
-    
-    const results = {};
-    for (const electionType of electionTypes) {
-      results[electionType] = await AnalysisService.getDailyAnalysis({
-        ...req.body,
-        electionYearType: electionType,
-      });
-    }
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      data: results,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// =====================================================
-// 7. SYMBOL SCANNER
-// =====================================================
-
-/**
- * POST /analysis/scanner
- * Multi-symbol scanner for consecutive trending days
- */
-router.post('/scanner', 
-  requireSubscription('basic', 'premium', 'enterprise'),
-  validate(scannerRequestSchema), 
+router.get('/symbols',
+  authenticateToken,
   async (req, res, next) => {
     try {
-      const startTime = Date.now();
-      const result = await AnalysisService.runScanner(req.body);
+      const symbols = await prisma.ticker.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          symbol: true,
+          name: true,
+          totalRecords: true,
+          firstDataDate: true,
+          lastDataDate: true,
+          lastUpdated: true,
+          _count: {
+            select: {
+              dailySeasonalityData: true,
+              mondayWeeklyData: true,
+              expiryWeeklyData: true,
+              monthlySeasonalityData: true,
+              yearlySeasonalityData: true
+            }
+          }
+        },
+        orderBy: { symbol: 'asc' }
+      });
 
       res.json({
         success: true,
-        processingTime: Date.now() - startTime,
-        matchCount: result.length,
-        data: result,
+        data: symbols.map(ticker => ({
+          id: ticker.id,
+          symbol: ticker.symbol,
+          name: ticker.name,
+          totalRecords: ticker.totalRecords,
+          firstDataDate: ticker.firstDataDate,
+          lastDataDate: ticker.lastDataDate,
+          lastUpdated: ticker.lastUpdated,
+          dataAvailable: {
+            daily: ticker._count.dailySeasonalityData,
+            mondayWeekly: ticker._count.mondayWeeklyData,
+            expiryWeekly: ticker._count.expiryWeeklyData,
+            monthly: ticker._count.monthlySeasonalityData,
+            yearly: ticker._count.yearlySeasonalityData
+          }
+        }))
       });
     } catch (error) {
       next(error);
@@ -285,174 +71,49 @@ router.post('/scanner',
   }
 );
 
-// =====================================================
-// 8. BACKTESTER (Premium Feature)
-// =====================================================
-
 /**
- * POST /analysis/backtest
- * Phenomena backtesting engine
+ * GET /analysis/symbols/:symbol/daily
+ * Get daily calculated data for a symbol
  */
-router.post('/backtest',
-  requireSubscription('premium', 'enterprise'),
+router.get('/symbols/:symbol/daily',
+  authenticateToken,
   async (req, res, next) => {
     try {
-      const startTime = Date.now();
-      const {
-        symbol,
-        startDate,
-        endDate,
-        entryConditions,
-        exitConditions,
-        positionSize = 100,
-        stopLoss,
-        takeProfit,
-      } = req.body;
+      const { symbol } = req.params;
+      const { page = 1, limit = 100 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      // Basic backtesting implementation
-      // Full implementation would include more sophisticated logic
-      const dailyResult = await AnalysisService.getDailyAnalysis({
-        symbols: [symbol],
-        startDate,
-        endDate,
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
       });
 
-      const data = dailyResult[symbol]?.data || [];
-      
-      // Simple backtest: buy on positive days, sell on negative
-      let position = 0;
-      let cash = 10000;
-      let trades = [];
-      
-      for (let i = 1; i < data.length; i++) {
-        const prev = data[i - 1];
-        const curr = data[i];
-        
-        // Entry: previous day was positive
-        if (position === 0 && prev.returnPercentage > 0) {
-          position = Math.floor(cash / curr.open);
-          cash -= position * curr.open;
-          trades.push({
-            type: 'BUY',
-            date: curr.date,
-            price: curr.open,
-            shares: position,
-          });
-        }
-        // Exit: current day is negative
-        else if (position > 0 && curr.returnPercentage < 0) {
-          cash += position * curr.close;
-          trades.push({
-            type: 'SELL',
-            date: curr.date,
-            price: curr.close,
-            shares: position,
-            pnl: (curr.close - trades[trades.length - 1].price) * position,
-          });
-          position = 0;
-        }
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
       }
 
-      // Close any open position
-      if (position > 0 && data.length > 0) {
-        const lastPrice = data[data.length - 1].close;
-        cash += position * lastPrice;
-      }
-
-      const totalReturn = ((cash - 10000) / 10000) * 100;
+      const [records, total] = await Promise.all([
+        prisma.dailySeasonalityData.findMany({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' },
+          take: parseInt(limit),
+          skip
+        }),
+        prisma.dailySeasonalityData.count({ where: { tickerId: ticker.id } })
+      ]);
 
       res.json({
         success: true,
-        processingTime: Date.now() - startTime,
         data: {
-          symbol,
-          initialCapital: 10000,
-          finalCapital: cash,
-          totalReturn: parseFloat(totalReturn.toFixed(2)),
-          tradeCount: trades.length,
-          trades: trades.slice(-20), // Last 20 trades
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// =====================================================
-// 9. PHENOMENA DETECTION
-// =====================================================
-
-/**
- * POST /analysis/phenomena
- * Pattern recognition and phenomena detection
- */
-router.post('/phenomena',
-  requireSubscription('basic', 'premium', 'enterprise'),
-  async (req, res, next) => {
-    try {
-      const startTime = Date.now();
-      const {
-        symbol,
-        startDate,
-        endDate,
-        phenomenaType = 'consecutive', // consecutive, reversal, breakout
-        threshold = 3,
-        percentChange = 0,
-        lookAhead = { weeks: 1, months: 1, years: 1 },
-      } = req.body;
-
-      const dailyResult = await AnalysisService.getDailyAnalysis({
-        symbols: [symbol],
-        startDate,
-        endDate,
-      });
-
-      const data = dailyResult[symbol]?.data || [];
-      const phenomena = [];
-
-      // Find consecutive trending days
-      if (phenomenaType === 'consecutive') {
-        let consecutiveCount = 0;
-        let startIdx = 0;
-        let isPositive = null;
-
-        for (let i = 0; i < data.length; i++) {
-          const isCurrentPositive = data[i].returnPercentage > percentChange;
-          
-          if (isPositive === null || isCurrentPositive === isPositive) {
-            if (isPositive === null) {
-              startIdx = i;
-              isPositive = isCurrentPositive;
-            }
-            consecutiveCount++;
-          } else {
-            if (consecutiveCount >= threshold) {
-              phenomena.push({
-                startDate: data[startIdx].date,
-                endDate: data[i - 1].date,
-                days: consecutiveCount,
-                direction: isPositive ? 'Bullish' : 'Bearish',
-                totalReturn: data.slice(startIdx, i).reduce((sum, d) => sum + d.returnPercentage, 0),
-              });
-            }
-            consecutiveCount = 1;
-            startIdx = i;
-            isPositive = isCurrentPositive;
+          symbol: ticker.symbol,
+          timeframe: 'daily',
+          records,
+          pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
           }
         }
-      }
-
-      res.json({
-        success: true,
-        processingTime: Date.now() - startTime,
-        data: {
-          symbol,
-          phenomenaType,
-          threshold,
-          phenomenaCount: phenomena.length,
-          phenomena,
-        },
       });
     } catch (error) {
       next(error);
@@ -460,89 +121,361 @@ router.post('/phenomena',
   }
 );
 
-// =====================================================
-// 10. BASKET ANALYSIS (Enterprise Feature)
-// =====================================================
-
 /**
- * POST /analysis/basket
- * Portfolio correlation and basket analysis
+ * GET /analysis/symbols/:symbol/monday-weekly
+ * Get Monday weekly data for a symbol
  */
-router.post('/basket',
-  requireSubscription('enterprise'),
+router.get('/symbols/:symbol/monday-weekly',
+  authenticateToken,
   async (req, res, next) => {
     try {
-      const startTime = Date.now();
-      const { symbols, startDate, endDate, weights } = req.body;
+      const { symbol } = req.params;
+      const { page = 1, limit = 100 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      if (!symbols || symbols.length < 2) {
-        return res.status(400).json({
-          success: false,
-          error: 'At least 2 symbols required for basket analysis',
-        });
-      }
-
-      const results = await AnalysisService.getDailyAnalysis({
-        symbols,
-        startDate,
-        endDate,
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
       });
 
-      // Calculate correlation matrix
-      const correlations = {};
-      for (const sym1 of symbols) {
-        correlations[sym1] = {};
-        for (const sym2 of symbols) {
-          if (sym1 === sym2) {
-            correlations[sym1][sym2] = 1;
-          } else {
-            // Simple correlation calculation
-            const data1 = results[sym1]?.data || [];
-            const data2 = results[sym2]?.data || [];
-            
-            // Align dates
-            const dateMap1 = new Map(data1.map(d => [d.date.toISOString().split('T')[0], d.returnPercentage]));
-            const dateMap2 = new Map(data2.map(d => [d.date.toISOString().split('T')[0], d.returnPercentage]));
-            
-            const commonDates = [...dateMap1.keys()].filter(d => dateMap2.has(d));
-            
-            if (commonDates.length > 10) {
-              const returns1 = commonDates.map(d => dateMap1.get(d));
-              const returns2 = commonDates.map(d => dateMap2.get(d));
-              
-              const mean1 = returns1.reduce((a, b) => a + b, 0) / returns1.length;
-              const mean2 = returns2.reduce((a, b) => a + b, 0) / returns2.length;
-              
-              let numerator = 0;
-              let denom1 = 0;
-              let denom2 = 0;
-              
-              for (let i = 0; i < returns1.length; i++) {
-                const diff1 = returns1[i] - mean1;
-                const diff2 = returns2[i] - mean2;
-                numerator += diff1 * diff2;
-                denom1 += diff1 * diff1;
-                denom2 += diff2 * diff2;
-              }
-              
-              correlations[sym1][sym2] = parseFloat((numerator / Math.sqrt(denom1 * denom2)).toFixed(4));
-            } else {
-              correlations[sym1][sym2] = null;
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const [records, total] = await Promise.all([
+        prisma.mondayWeeklyData.findMany({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' },
+          take: parseInt(limit),
+          skip
+        }),
+        prisma.mondayWeeklyData.count({ where: { tickerId: ticker.id } })
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          symbol: ticker.symbol,
+          timeframe: 'mondayWeekly',
+          records,
+          pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/expiry-weekly
+ * Get Expiry weekly data for a symbol
+ */
+router.get('/symbols/:symbol/expiry-weekly',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+      const { page = 1, limit = 100 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const [records, total] = await Promise.all([
+        prisma.expiryWeeklyData.findMany({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' },
+          take: parseInt(limit),
+          skip
+        }),
+        prisma.expiryWeeklyData.count({ where: { tickerId: ticker.id } })
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          symbol: ticker.symbol,
+          timeframe: 'expiryWeekly',
+          records,
+          pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/monthly
+ * Get monthly data for a symbol
+ */
+router.get('/symbols/:symbol/monthly',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+      const { page = 1, limit = 100 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const [records, total] = await Promise.all([
+        prisma.monthlySeasonalityData.findMany({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' },
+          take: parseInt(limit),
+          skip
+        }),
+        prisma.monthlySeasonalityData.count({ where: { tickerId: ticker.id } })
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          symbol: ticker.symbol,
+          timeframe: 'monthly',
+          records,
+          pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/yearly
+ * Get yearly data for a symbol
+ */
+router.get('/symbols/:symbol/yearly',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+      const { page = 1, limit = 100 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const [records, total] = await Promise.all([
+        prisma.yearlySeasonalityData.findMany({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' },
+          take: parseInt(limit),
+          skip
+        }),
+        prisma.yearlySeasonalityData.count({ where: { tickerId: ticker.id } })
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          symbol: ticker.symbol,
+          timeframe: 'yearly',
+          records,
+          pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/summary
+ * Get summary statistics for a symbol across all timeframes
+ */
+router.get('/symbols/:symbol/summary',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+      logger.info(`Fetching summary for symbol: ${symbol}`);
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() },
+        include: {
+          _count: {
+            select: {
+              dailySeasonalityData: true,
+              mondayWeeklyData: true,
+              expiryWeeklyData: true,
+              monthlySeasonalityData: true,
+              yearlySeasonalityData: true
             }
           }
         }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
       }
+
+      logger.info(`Ticker found: ${ticker.symbol}, daily count: ${ticker._count.dailySeasonalityData}`);
+
+      // Get date range from daily data (oldest and newest)
+      const [oldestDaily, newestDaily] = await Promise.all([
+        prisma.dailySeasonalityData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'asc' },
+          select: { date: true }
+        }),
+        prisma.dailySeasonalityData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' },
+          select: { date: true }
+        })
+      ]);
+
+      logger.info(`Date range: ${oldestDaily?.date} to ${newestDaily?.date}`);
+
+      // Get latest data from each timeframe
+      const [latestDaily, latestMondayWeekly, latestExpiryWeekly, latestMonthly, latestYearly] = await Promise.all([
+        prisma.dailySeasonalityData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' }
+        }),
+        prisma.mondayWeeklyData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' }
+        }),
+        prisma.expiryWeeklyData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' }
+        }),
+        prisma.monthlySeasonalityData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' }
+        }),
+        prisma.yearlySeasonalityData.findFirst({
+          where: { tickerId: ticker.id },
+          orderBy: { date: 'desc' }
+        })
+      ]);
 
       res.json({
         success: true,
-        processingTime: Date.now() - startTime,
         data: {
-          symbols,
-          correlations,
-          individualStats: Object.fromEntries(
-            symbols.map(s => [s, results[s]?.statistics])
-          ),
-        },
+          symbol: ticker.symbol,
+          name: ticker.name,
+          // Use daily data count as total records
+          totalRecords: ticker._count.dailySeasonalityData,
+          // Use date range from daily data
+          firstDataDate: oldestDaily?.date || null,
+          lastDataDate: newestDaily?.date || null,
+          lastUpdated: newestDaily?.date || ticker.lastUpdated,
+          dataAvailable: {
+            daily: ticker._count.dailySeasonalityData,
+            mondayWeekly: ticker._count.mondayWeeklyData,
+            expiryWeekly: ticker._count.expiryWeeklyData,
+            monthly: ticker._count.monthlySeasonalityData,
+            yearly: ticker._count.yearlySeasonalityData
+          },
+          latestData: {
+            daily: latestDaily,
+            mondayWeekly: latestMondayWeekly,
+            expiryWeekly: latestExpiryWeekly,
+            monthly: latestMonthly,
+            yearly: latestYearly
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/stats
+ * Get overall analysis statistics
+ */
+router.get('/stats',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const [
+        totalSymbols,
+        dailyCount,
+        mondayWeeklyCount,
+        expiryWeeklyCount,
+        monthlyCount,
+        yearlyCount,
+        recentSymbols
+      ] = await Promise.all([
+        prisma.ticker.count({ where: { isActive: true } }),
+        prisma.dailySeasonalityData.count(),
+        prisma.mondayWeeklyData.count(),
+        prisma.expiryWeeklyData.count(),
+        prisma.monthlySeasonalityData.count(),
+        prisma.yearlySeasonalityData.count(),
+        prisma.ticker.findMany({
+          where: { isActive: true },
+          orderBy: { lastUpdated: 'desc' },
+          take: 10,
+          select: {
+            symbol: true,
+            name: true,
+            totalRecords: true,
+            lastUpdated: true
+          }
+        })
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          totalSymbols,
+          recordCounts: {
+            daily: dailyCount,
+            mondayWeekly: mondayWeeklyCount,
+            expiryWeekly: expiryWeeklyCount,
+            monthly: monthlyCount,
+            yearly: yearlyCount,
+            total: dailyCount + mondayWeeklyCount + expiryWeeklyCount + monthlyCount + yearlyCount
+          },
+          recentlyUpdated: recentSymbols
+        }
       });
     } catch (error) {
       next(error);
@@ -551,64 +484,280 @@ router.post('/basket',
 );
 
 // =====================================================
-// 11. CHART DATA
+// CSV EXPORT ENDPOINTS
 // =====================================================
 
 /**
- * POST /analysis/chart
- * Get formatted chart data for visualization
+ * DELETE /analysis/symbols/:symbol
+ * Delete a ticker and ALL its related data from all tables
  */
-router.post('/chart', async (req, res, next) => {
-  try {
-    const startTime = Date.now();
-    const { symbol, startDate, endDate, chartType = 'candlestick' } = req.body;
+router.delete('/symbols/:symbol',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
 
-    const result = await AnalysisService.getDailyAnalysis({
-      symbols: [symbol],
-      startDate,
-      endDate,
-    });
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
 
-    const data = result[symbol]?.data || [];
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
 
-    // Format for different chart types
-    let chartData;
-    switch (chartType) {
-      case 'candlestick':
-        chartData = data.map(d => ({
-          x: d.date,
-          open: d.open,
-          high: d.high,
-          low: d.low,
-          close: d.close,
-        }));
-        break;
-      case 'line':
-        chartData = data.map(d => ({
-          x: d.date,
-          y: d.close,
-        }));
-        break;
-      case 'bar':
-        chartData = data.map(d => ({
-          x: d.date,
-          y: d.returnPercentage,
-          color: d.returnPercentage >= 0 ? 'green' : 'red',
-        }));
-        break;
-      default:
-        chartData = data;
+      logger.info(`Deleting ticker and all related data: ${symbol}`, { tickerId: ticker.id });
+
+      // Delete from all related tables (order matters due to foreign keys)
+      const deleteCounts = {};
+
+      // Delete from calculated data tables
+      deleteCounts.dailySeasonalityData = (await prisma.dailySeasonalityData.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      deleteCounts.mondayWeeklyData = (await prisma.mondayWeeklyData.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      deleteCounts.expiryWeeklyData = (await prisma.expiryWeeklyData.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      deleteCounts.monthlySeasonalityData = (await prisma.monthlySeasonalityData.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      deleteCounts.yearlySeasonalityData = (await prisma.yearlySeasonalityData.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      // Delete from raw data table
+      deleteCounts.seasonalityData = (await prisma.seasonalityData.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      // Delete generated files records
+      deleteCounts.generatedFiles = (await prisma.generatedFile.deleteMany({
+        where: { tickerId: ticker.id }
+      })).count;
+
+      // Finally delete the ticker
+      await prisma.ticker.delete({
+        where: { id: ticker.id }
+      });
+
+      logger.info(`Ticker deleted successfully: ${symbol}`, { deleteCounts });
+
+      res.json({
+        success: true,
+        message: `Ticker ${symbol} and all related data deleted successfully`,
+        data: {
+          symbol: symbol.toUpperCase(),
+          deletedRecords: deleteCounts,
+          totalDeleted: Object.values(deleteCounts).reduce((a, b) => a + b, 0)
+        }
+      });
+    } catch (error) {
+      next(error);
     }
-
-    res.json({
-      success: true,
-      processingTime: Date.now() - startTime,
-      chartType,
-      data: chartData,
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
+
+/**
+ * Helper function to convert records to CSV
+ */
+function recordsToCSV(records) {
+  if (!records || records.length === 0) return '';
+  
+  // Get headers from first record, excluding internal fields
+  const excludeFields = ['id', 'tickerId', 'createdAt', 'updatedAt'];
+  const headers = Object.keys(records[0]).filter(k => !excludeFields.includes(k));
+  
+  // Create CSV content
+  const csvRows = [headers.join(',')];
+  
+  for (const record of records) {
+    const values = headers.map(header => {
+      let value = record[header];
+      if (value === null || value === undefined) return '';
+      if (value instanceof Date) return value.toISOString().split('T')[0];
+      if (typeof value === 'string' && value.includes(',')) return `"${value}"`;
+      return value;
+    });
+    csvRows.push(values.join(','));
+  }
+  
+  return csvRows.join('\n');
+}
+
+/**
+ * GET /analysis/symbols/:symbol/daily/export
+ * Export daily data as CSV
+ */
+router.get('/symbols/:symbol/daily/export',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const records = await prisma.dailySeasonalityData.findMany({
+        where: { tickerId: ticker.id },
+        orderBy: { date: 'asc' }
+      });
+
+      const csv = recordsToCSV(records);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${symbol}_daily.csv"`);
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/monday-weekly/export
+ * Export Monday weekly data as CSV
+ */
+router.get('/symbols/:symbol/monday-weekly/export',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const records = await prisma.mondayWeeklyData.findMany({
+        where: { tickerId: ticker.id },
+        orderBy: { date: 'asc' }
+      });
+
+      const csv = recordsToCSV(records);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${symbol}_monday_weekly.csv"`);
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/expiry-weekly/export
+ * Export Expiry weekly data as CSV
+ */
+router.get('/symbols/:symbol/expiry-weekly/export',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const records = await prisma.expiryWeeklyData.findMany({
+        where: { tickerId: ticker.id },
+        orderBy: { date: 'asc' }
+      });
+
+      const csv = recordsToCSV(records);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${symbol}_expiry_weekly.csv"`);
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/monthly/export
+ * Export monthly data as CSV
+ */
+router.get('/symbols/:symbol/monthly/export',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const records = await prisma.monthlySeasonalityData.findMany({
+        where: { tickerId: ticker.id },
+        orderBy: { date: 'asc' }
+      });
+
+      const csv = recordsToCSV(records);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${symbol}_monthly.csv"`);
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/symbols/:symbol/yearly/export
+ * Export yearly data as CSV
+ */
+router.get('/symbols/:symbol/yearly/export',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { symbol } = req.params;
+
+      const ticker = await prisma.ticker.findUnique({
+        where: { symbol: symbol.toUpperCase() }
+      });
+
+      if (!ticker) {
+        throw new NotFoundError('Symbol');
+      }
+
+      const records = await prisma.yearlySeasonalityData.findMany({
+        where: { tickerId: ticker.id },
+        orderBy: { date: 'asc' }
+      });
+
+      const csv = recordsToCSV(records);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${symbol}_yearly.csv"`);
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 module.exports = router;

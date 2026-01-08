@@ -12,9 +12,9 @@ const config = require('../config');
 const { CSVProcessor } = require('./csvProcessor');
 const { calculateAllDerivedFields } = require('./calculations');
 
-// Initialize MinIO client
+// Initialize MinIO client - use INTERNAL endpoint for worker
 const minioClient = new Minio.Client({
-  endPoint: config.minio.endpoint,
+  endPoint: config.minio.internalEndpoint,
   port: config.minio.port,
   useSSL: config.minio.useSSL,
   accessKey: config.minio.accessKey,
@@ -73,7 +73,10 @@ async function processCSVJob(job) {
       calculateDerived: options.calculateDerived !== false,
     });
 
-    const result = await processor.processUploadedFile(fileBuffer, fileName, options);
+    const result = await processor.processUploadedFile(fileBuffer, fileName, {
+      ...options,
+      generateCalculatedData: true // Enable calculated data storage in DB
+    });
 
     // Update progress
     await job.updateProgress(100);
@@ -396,6 +399,22 @@ async function updateBatchProgress(batchId) {
     }
   }
 
+  // Collect error summary from failed files
+  let errorSummary = null;
+  if (failedFiles > 0) {
+    const failedFileErrors = batch.files
+      .filter(f => f.status === 'FAILED' && f.errorMessage)
+      .map(f => `${f.originalName}: ${f.errorMessage}`)
+      .slice(0, 5); // Limit to first 5 errors
+    
+    if (failedFileErrors.length > 0) {
+      errorSummary = failedFileErrors.join('\n\n');
+      if (failedFiles > 5) {
+        errorSummary += `\n\n... and ${failedFiles - 5} more failed files`;
+      }
+    }
+  }
+
   await prisma.uploadBatch.update({
     where: { id: batchId },
     data: {
@@ -404,6 +423,7 @@ async function updateBatchProgress(batchId) {
       progressPercentage: (completedFiles / batch.totalFiles) * 100,
       totalRecordsProcessed: totalProcessed,
       status,
+      errorSummary,
       completedAt: isComplete ? new Date() : null,
     },
   });

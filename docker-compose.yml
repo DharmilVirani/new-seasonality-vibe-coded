@@ -43,7 +43,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: seasonality-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --save 900 1 --save 300 10 --timeout 0
     volumes:
       - redis_data:/data
     ports:
@@ -74,6 +74,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-admin12345}
       MINIO_BROWSER_REDIRECT_URL: http://192.168.4.30:9001
+      # CORS configuration for browser uploads
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     volumes:
       - minio_data:/data
     ports:
@@ -115,12 +117,14 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       
-      # MinIO
-      MINIO_ENDPOINT: minio
+      # MinIO - dual endpoint config
+      MINIO_INTERNAL_ENDPOINT: minio        # Docker network access
+      MINIO_ENDPOINT: 192.168.4.30             # Browser / frontend access
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-admin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-admin12345}
       MINIO_USE_SSL: "false"
+      MINIO_BUCKET: seasonality-uploads
       
       # Application
       NODE_ENV: ${NODE_ENV:-production}
@@ -134,8 +138,6 @@ services:
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
-      - ./apps/backend:/app
-      - /app/node_modules
       - temp_uploads:/tmp/seasonality-uploads
     depends_on:
       postgres:
@@ -154,7 +156,7 @@ services:
           memory: 512M
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -170,20 +172,33 @@ services:
     container_name: seasonality-worker
     command: ["npm", "run", "worker"]
     environment:
-      # Same environment as backend
+      # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-seasonality}:${POSTGRES_PASSWORD:-seasonality123}@postgres:5432/${POSTGRES_DB:-seasonality}
+      
+      # Redis
       REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # MinIO - worker uses internal endpoint only
+      MINIO_INTERNAL_ENDPOINT: minio
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-admin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-admin12345}
       MINIO_USE_SSL: "false"
+      MINIO_BUCKET: seasonality-uploads
+      
+      # Application
       NODE_ENV: ${NODE_ENV:-production}
       
       # Worker-specific settings
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       DB_BATCH_SIZE: ${DB_BATCH_SIZE:-1000}
       TEMP_DIR: /tmp/seasonality-uploads
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - temp_uploads:/tmp/seasonality-uploads
     depends_on:

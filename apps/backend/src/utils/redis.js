@@ -6,6 +6,13 @@ const Redis = require('ioredis');
 const config = require('../config');
 const { logger } = require('./logger');
 
+// Log Redis configuration for debugging
+logger.info('Redis configuration', {
+  host: config.redis.host,
+  port: config.redis.port,
+  hasPassword: !!config.redis.password,
+});
+
 // Create Redis connection
 const redis = new Redis({
   host: config.redis.host,
@@ -13,21 +20,39 @@ const redis = new Redis({
   password: config.redis.password,
   maxRetriesPerRequest: null, // Required for BullMQ
   enableReadyCheck: false,
+  lazyConnect: false,
   retryStrategy: (times) => {
-    if (times > 3) {
-      logger.error('Redis connection failed after 3 retries');
+    if (times > 10) {
+      logger.error('Redis connection failed after 10 retries');
       return null;
     }
-    return Math.min(times * 200, 2000);
+    const delay = Math.min(times * 500, 5000);
+    logger.warn(`Redis retry attempt ${times}, waiting ${delay}ms`);
+    return delay;
+  },
+  reconnectOnError: (err) => {
+    const targetError = 'READONLY';
+    if (err.message.includes(targetError)) {
+      return true;
+    }
+    return false;
   },
 });
 
 redis.on('connect', () => {
-  logger.info('Redis connected');
+  logger.info('Redis connected', { host: config.redis.host, port: config.redis.port });
+});
+
+redis.on('ready', () => {
+  logger.info('Redis ready');
 });
 
 redis.on('error', (err) => {
-  logger.error('Redis error', { error: err.message });
+  logger.error('Redis error', { error: err.message, host: config.redis.host });
+});
+
+redis.on('close', () => {
+  logger.warn('Redis connection closed');
 });
 
 // Cache helper functions

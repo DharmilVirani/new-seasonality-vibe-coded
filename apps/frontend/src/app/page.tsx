@@ -10,7 +10,7 @@ import Link from 'next/link';
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, checkAuth } = useAuthStore();
+  const { isAuthenticated, user, checkAuth } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
@@ -18,9 +18,14 @@ export default function HomePage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/dashboard/daily');
+      // Redirect admin users to admin panel, others to dashboard
+      if (user?.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard/daily');
+      }
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, user, router]);
 
   const features = [
     { icon: Calendar, title: 'Daily Analysis', desc: '40+ filters for daily seasonality patterns' },

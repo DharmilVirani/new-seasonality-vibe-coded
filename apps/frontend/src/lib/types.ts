@@ -104,6 +104,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  role: 'admin' | 'user' | 'research' | 'trial';
   subscriptionTier: 'trial' | 'basic' | 'premium' | 'enterprise';
   subscriptionExpiry: string | null;
 }

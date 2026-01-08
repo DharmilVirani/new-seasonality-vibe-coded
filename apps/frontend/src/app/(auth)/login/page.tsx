@@ -22,7 +22,16 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success('Login successful!');
-      router.push('/dashboard/daily');
+      
+      // Get user from store after login
+      const { user } = useAuthStore.getState();
+      
+      // Redirect admin users to admin panel, others to dashboard
+      if (user?.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard/daily');
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Login failed');
     }
