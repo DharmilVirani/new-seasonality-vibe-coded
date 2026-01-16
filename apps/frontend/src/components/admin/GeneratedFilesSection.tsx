@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
 import { 
   Database, Search, Calendar, 
-  BarChart3, TrendingUp, Archive, ExternalLink, Eye, Trash2,
-  Clock, ArrowRight, Activity
+  BarChart3, TrendingUp, Archive, Eye, Trash2,
+  Clock, ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -96,15 +96,15 @@ export function CalculatedDataSection() {
     queryKey: ['all-symbols'],
     queryFn: async () => {
       const response = await api.get('/analysis/symbols');
-      // Extract just the symbol names from the response
-      return (response.data.data || []).map((s: any) => s.symbol);
+      const symbols = (response.data.symbols || []).map((s: any) => s.symbol);
+      return symbols;
     },
   });
 
-  // Filter symbols based on search input
+  // Filter symbols that START with the search input (only when typing)
   const filteredSymbols = searchSymbol.trim().length > 0 
     ? (allSymbols || []).filter((s: string) => 
-        s.toLowerCase().includes(searchSymbol.toLowerCase())
+        s.toLowerCase().startsWith(searchSymbol.toLowerCase())
       ).slice(0, 8) // Limit to 8 suggestions
     : [];
 
@@ -278,7 +278,7 @@ export function CalculatedDataSection() {
         <div className="xl:col-span-2 space-y-8">
           
           {/* Search Card */}
-          <Card className="border-0 shadow-lg shadow-slate-200/40 ring-1 ring-slate-200">
+          <Card className="border-0 shadow-lg shadow-slate-200/40 ring-1 ring-slate-200 overflow-visible">
             <CardHeader className="border-b border-slate-50 px-8 py-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">

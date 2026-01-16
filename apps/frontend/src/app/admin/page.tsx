@@ -119,19 +119,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!bulkBatchId || !isProcessing) return;
-    if (bulkStatus?.status === 'COMPLETED' || bulkStatus?.status === 'FAILED' || bulkStatus?.status === 'PARTIAL') {
-      setIsProcessing(false);
-      queryClient.invalidateQueries({ queryKey: ['upload-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['upload-stats'] });
-      return;
-    }
+    
     const pollInterval = setInterval(async () => {
       try {
         const response = await uploadApi.getBulkStatus(bulkBatchId);
         if (response.data.success) {
-          setBulkStatus(response.data.data);
-          if (['COMPLETED', 'FAILED', 'PARTIAL'].includes(response.data.data.status)) {
+          const newStatus = response.data.data;
+          setBulkStatus(newStatus);
+          
+          // Stop polling when processing is complete
+          if (['COMPLETED', 'FAILED', 'PARTIAL'].includes(newStatus.status)) {
             setIsProcessing(false);
+            clearInterval(pollInterval);
             queryClient.invalidateQueries({ queryKey: ['upload-batches'] });
             queryClient.invalidateQueries({ queryKey: ['upload-stats'] });
           }
@@ -140,8 +139,9 @@ export default function AdminPage() {
         console.error('Error polling batch status:', err);
       }
     }, 2000);
+    
     return () => clearInterval(pollInterval);
-  }, [bulkBatchId, bulkStatus?.status, isProcessing, queryClient]);
+  }, [bulkBatchId, isProcessing, queryClient]);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
