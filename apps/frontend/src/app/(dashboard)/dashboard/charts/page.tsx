@@ -45,7 +45,7 @@ export default function ChartsPage() {
 
   const chartData = data?.data?.map((d: any) => ({
     ...d,
-    x: new Date(d.x).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    x: new Date(d.x).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
   })) || [];
 
   return (

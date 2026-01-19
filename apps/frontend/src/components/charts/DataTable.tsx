@@ -22,6 +22,39 @@ interface DataTableProps {
 
 export function DataTable({ data, title = 'Data Table', pageSize = 20 }: DataTableProps) {
   const [page, setPage] = useState(0);
+  
+  // If data is undefined (loading state), show loading
+  if (!data) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">
+            Loading data...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  // If data is not an array or empty array, show no data message
+  if (!Array.isArray(data) || data.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">
+            No data available
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
   const totalPages = Math.ceil(data.length / pageSize);
   const paginatedData = data.slice(page * pageSize, (page + 1) * pageSize);
 
@@ -49,10 +82,6 @@ export function DataTable({ data, title = 'Data Table', pageSize = 20 }: DataTab
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg">{title}</CardTitle>
-        <Button variant="outline" size="sm" onClick={downloadCSV}>
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
-        </Button>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

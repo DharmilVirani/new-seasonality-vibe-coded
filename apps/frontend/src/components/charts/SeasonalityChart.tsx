@@ -40,7 +40,7 @@ export function SeasonalityChart({
       cumulative += d.returnPercentage || 0;
       return {
         ...d,
-        date: new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        date: new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }),
         cumulativeReturn: parseFloat(cumulative.toFixed(2)),
       };
     });

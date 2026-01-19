@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
 import { 
   Database, Search, Calendar, 
-  BarChart3, TrendingUp, Archive, Eye, Trash2,
-  Clock, ArrowRight
+  BarChart3, TrendingUp, Archive, ExternalLink, Eye, Trash2,
+  Clock, ArrowRight, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -96,15 +96,15 @@ export function CalculatedDataSection() {
     queryKey: ['all-symbols'],
     queryFn: async () => {
       const response = await api.get('/analysis/symbols');
-      const symbols = (response.data.symbols || []).map((s: any) => s.symbol);
-      return symbols;
+      // Extract just the symbol names from the response
+      return (response.data.data || []).map((s: any) => s.symbol);
     },
   });
 
-  // Filter symbols that START with the search input (only when typing)
+  // Filter symbols based on search input
   const filteredSymbols = searchSymbol.trim().length > 0 
     ? (allSymbols || []).filter((s: string) => 
-        s.toLowerCase().startsWith(searchSymbol.toLowerCase())
+        s.toLowerCase().includes(searchSymbol.toLowerCase())
       ).slice(0, 8) // Limit to 8 suggestions
     : [];
 
@@ -229,6 +229,9 @@ export function CalculatedDataSection() {
                   {statsLoading ? <Loading size="sm" /> : statsData?.totalSymbols || 0}
                 </h3>
               </div>
+              <div className="rounded-full bg-blue-50 p-3">
+                <Database className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -241,6 +244,9 @@ export function CalculatedDataSection() {
                 <h3 className="mt-2 text-3xl font-bold text-slate-900">
                   {statsLoading ? <Loading size="sm" /> : statsData?.recordCounts?.daily?.toLocaleString() || 0}
                 </h3>
+              </div>
+              <div className="rounded-full bg-indigo-50 p-3">
+                <Calendar className="h-6 w-6 text-indigo-600" />
               </div>
             </div>
           </CardContent>
@@ -255,6 +261,9 @@ export function CalculatedDataSection() {
                   {statsLoading ? <Loading size="sm" /> : statsData?.recordCounts?.weekly?.toLocaleString() || 0}
                 </h3>
               </div>
+              <div className="rounded-full bg-emerald-50 p-3">
+                <BarChart3 className="h-6 w-6 text-emerald-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -268,6 +277,9 @@ export function CalculatedDataSection() {
                   {statsLoading ? <Loading size="sm" /> : statsData?.recordCounts?.total?.toLocaleString() || 0}
                 </h3>
               </div>
+              <div className="rounded-full bg-orange-50 p-3">
+                <ExternalLink className="h-6 w-6 text-orange-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -278,7 +290,7 @@ export function CalculatedDataSection() {
         <div className="xl:col-span-2 space-y-8">
           
           {/* Search Card */}
-          <Card className="border-0 shadow-lg shadow-slate-200/40 ring-1 ring-slate-200 overflow-visible">
+          <Card className="border-0 shadow-lg shadow-slate-200/40 ring-1 ring-slate-200">
             <CardHeader className="border-b border-slate-50 px-8 py-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
@@ -361,6 +373,7 @@ export function CalculatedDataSection() {
                    <div>
                       <h2 className="text-2xl font-bold text-slate-900">{selectedSymbol}</h2>
                       <p className="text-sm text-slate-500 flex items-center gap-1">
+                         <Activity className="h-3 w-3" />
                          Analysis Data
                       </p>
                    </div>
@@ -525,6 +538,7 @@ export function CalculatedDataSection() {
           <Card className="border-0 shadow-lg shadow-slate-200/40 ring-1 ring-slate-200 h-full flex flex-col bg-white">
             <CardHeader className="bg-white border-b border-slate-50 py-5 px-6">
               <div className="flex items-center gap-2">
+                 <Activity className="h-5 w-5 text-emerald-600" />
                  <CardTitle className="text-base font-bold text-slate-800">Recently Updated</CardTitle>
               </div>
             </CardHeader>

@@ -199,10 +199,10 @@ export interface MonthlyAnalysisParams {
 }
 
 export interface YearlyAnalysisParams {
-  symbol: string;
+  symbols: string[];
   startDate: string;
   endDate: string;
-  filters?: FilterConfig;
+  overlayType?: 'CalendarDays' | 'TradingDays';
 }
 
 export interface ScenarioParams {
