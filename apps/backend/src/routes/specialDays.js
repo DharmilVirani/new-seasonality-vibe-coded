@@ -14,7 +14,7 @@ const prisma = new PrismaClient();
  * GET /api/special-days
  * Get all unique special day names
  */
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const specialDays = await prisma.specialDay.findMany({
       distinct: ['name'],
@@ -46,7 +46,7 @@ router.get('/', authenticateToken, async (req, res) => {
  * GET /api/special-days/by-year/:year
  * Get special days for a specific year
  */
-router.get('/by-year/:year', authenticateToken, async (req, res) => {
+router.get('/by-year/:year', async (req, res) => {
   try {
     const year = parseInt(req.params.year);
 
@@ -85,7 +85,7 @@ router.get('/by-year/:year', authenticateToken, async (req, res) => {
  * GET /api/special-days/by-name/:name
  * Get all occurrences of a specific special day across years
  */
-router.get('/by-name/:name', authenticateToken, async (req, res) => {
+router.get('/by-name/:name', async (req, res) => {
   try {
     const name = req.params.name.toUpperCase();
 
@@ -117,7 +117,7 @@ router.get('/by-name/:name', authenticateToken, async (req, res) => {
  * GET /api/special-days/categories
  * Get all special day categories
  */
-router.get('/categories', authenticateToken, async (req, res) => {
+router.get('/categories', async (req, res) => {
   try {
     const categories = await prisma.specialDay.groupBy({
       by: ['category', 'country'],
@@ -141,7 +141,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
  * GET /api/special-days/date-range
  * Get special days within a date range
  */
-router.get('/date-range', authenticateToken, async (req, res) => {
+router.get('/date-range', async (req, res) => {
   try {
     const { startDate, endDate, names } = req.query;
 

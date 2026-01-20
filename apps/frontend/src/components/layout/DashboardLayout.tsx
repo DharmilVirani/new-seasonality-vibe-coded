@@ -26,16 +26,16 @@ interface DashboardLayoutProps {
 }
 
 const navigationItems = [
-  { icon: Calendar, label: 'Daily', href: '/dashboard/daily' },
-  { icon: BarChart3, label: 'Weekly', href: '/dashboard/weekly' },
-  { icon: TrendingUp, label: 'Monthly', href: '/dashboard/monthly' },
-  { icon: PieChart, label: 'Yearly', href: '/dashboard/yearly' },
-  { icon: Zap, label: 'Scenario', href: '/dashboard/scenario' },
-  { icon: Target, label: 'Election', href: '/dashboard/election' },
-  { icon: Search, label: 'Scanner', href: '/dashboard/scanner' },
-  { icon: Layers, label: 'Backtester', href: '/dashboard/backtester' },
-  { icon: Target, label: 'Phenomena', href: '/dashboard/phenomena' },
-  { icon: ShoppingCart, label: 'Basket', href: '/dashboard/basket' },
+  { icon: Calendar, label: 'Daily', href: '/dashboard/daily', color: 'blue' },
+  { icon: BarChart3, label: 'Weekly', href: '/dashboard/weekly', color: 'emerald' },
+  { icon: TrendingUp, label: 'Monthly', href: '/dashboard/monthly', color: 'purple' },
+  { icon: PieChart, label: 'Yearly', href: '/dashboard/yearly', color: 'orange' },
+  { icon: Zap, label: 'Scenario', href: '/dashboard/scenario', color: 'yellow' },
+  { icon: Target, label: 'Election', href: '/dashboard/election', color: 'red' },
+  { icon: Search, label: 'Scanner', href: '/dashboard/scanner', color: 'cyan' },
+  { icon: Layers, label: 'Backtester', href: '/dashboard/backtester', color: 'pink' },
+  { icon: Target, label: 'Phenomena', href: '/dashboard/phenomena', color: 'teal' },
+  { icon: ShoppingCart, label: 'Basket', href: '/dashboard/basket', color: 'indigo' },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -59,7 +59,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <aside className="w-16 bg-white border-r border-slate-200 flex flex-col items-center py-4">
         {/* Logo */}
         <div className="mb-8">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
+          <div className={cn(
+            "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+            pathname.includes('/weekly') ? "bg-emerald-600" :
+            pathname.includes('/daily') ? "bg-blue-600" :
+            pathname.includes('/monthly') ? "bg-purple-600" :
+            pathname.includes('/yearly') ? "bg-orange-600" :
+            "bg-indigo-600"
+          )}>
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
         </div>
@@ -70,6 +77,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             
+            // Color mapping for each page
+            const colorClasses = {
+              blue: { bg: 'bg-blue-50', text: 'text-blue-600', indicator: 'bg-blue-600' },
+              emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', indicator: 'bg-emerald-600' },
+              purple: { bg: 'bg-purple-50', text: 'text-purple-600', indicator: 'bg-purple-600' },
+              orange: { bg: 'bg-orange-50', text: 'text-orange-600', indicator: 'bg-orange-600' },
+              yellow: { bg: 'bg-yellow-50', text: 'text-yellow-600', indicator: 'bg-yellow-600' },
+              red: { bg: 'bg-red-50', text: 'text-red-600', indicator: 'bg-red-600' },
+              cyan: { bg: 'bg-cyan-50', text: 'text-cyan-600', indicator: 'bg-cyan-600' },
+              pink: { bg: 'bg-pink-50', text: 'text-pink-600', indicator: 'bg-pink-600' },
+              teal: { bg: 'bg-teal-50', text: 'text-teal-600', indicator: 'bg-teal-600' },
+              indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', indicator: 'bg-indigo-600' },
+            };
+            
+            const colors = colorClasses[item.color as keyof typeof colorClasses] || colorClasses.indigo;
+            
             return (
               <button
                 key={item.href}
@@ -77,7 +100,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 className={cn(
                   "w-12 h-12 rounded-xl flex items-center justify-center transition-all relative group",
                   isActive 
-                    ? "bg-indigo-50 text-indigo-600" 
+                    ? `${colors.bg} ${colors.text}` 
                     : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
                 )}
                 title={item.label}
@@ -91,7 +114,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 
                 {/* Active Indicator */}
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-indigo-600 rounded-r" />
+                  <div className={cn("absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r", colors.indicator)} />
                 )}
               </button>
             );

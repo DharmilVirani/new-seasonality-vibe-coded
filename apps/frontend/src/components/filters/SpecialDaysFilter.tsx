@@ -34,12 +34,7 @@ export function SpecialDaysFilter() {
       setLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/special-days`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/special-days`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch special days');
@@ -86,11 +81,11 @@ export function SpecialDaysFilter() {
   }, {} as Record<string, SpecialDay[]>);
 
   const categoryLabels: Record<string, string> = {
-    'FESTIVAL': '🎉 Festivals',
-    'HOLIDAY': '🏖️ Holidays',
-    'NATIONAL_HOLIDAY': '🇮🇳 National Holidays',
-    'BUDGET': '💰 Budget Days',
-    'ELECTION': '🗳️ Election Days',
+    'FESTIVAL': 'Festivals',
+    'HOLIDAY': 'Holidays',
+    'NATIONAL_HOLIDAY': 'National Holidays',
+    'BUDGET': 'Budget Days',
+    'ELECTION': 'Election Days',
   };
 
   if (loading) {
