@@ -19,7 +19,7 @@ export function MonthFilters({ isCompact = false }: MonthFiltersProps) {
 
   return (
     <div className="filter-section">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="flex flex-col gap-4">
         <div className="space-y-2">
           <Label className="text-xs">Positive/Negative</Label>
           <Select
@@ -53,25 +53,25 @@ export function MonthFilters({ isCompact = false }: MonthFiltersProps) {
             </SelectContent>
           </Select>
         </div>
-      </div>
 
-      <div className="mt-4 space-y-2">
-        <Label className="text-xs">Specific Month</Label>
-        <Select
-          value={String(monthFilters.specificMonth || 0)}
-          onValueChange={(value) => updateFilter('monthFilters', { specificMonth: parseInt(value) })}
-        >
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-white">
-            {months.map((month, index) => (
-              <SelectItem key={index} value={String(index)}>
-                {month}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          <Label className="text-xs">Specific Month</Label>
+          <Select
+            value={String(monthFilters.specificMonth || 0)}
+            onValueChange={(value) => updateFilter('monthFilters', { specificMonth: parseInt(value) })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {months.map((month, index) => (
+                <SelectItem key={index} value={String(index)}>
+                  {month}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );

@@ -651,6 +651,29 @@ model ElectionYearCategory {
 }
 
 // =====================================================
+// SPECIAL DAYS - Festivals, Holidays, Events
+// =====================================================
+
+model SpecialDay {
+  id          Int      @id @default(autoincrement())
+  name        String   // "MAHASHIVRATRI", "DIWALI", etc.
+  date        DateTime // The date of the special day
+  year        Int      // Year for quick filtering
+  country     String   @default("INDIA") // "INDIA", "USA"
+  category    String   @default("FESTIVAL") // "FESTIVAL", "HOLIDAY", "EVENT", "BUDGET"
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([name, date])
+  @@index([name])
+  @@index([date])
+  @@index([year])
+  @@index([country])
+  @@index([name, year])
+  @@map("special_days")
+}
+
+// =====================================================
 // SYSTEM MONITORING & AUDIT
 // =====================================================
 

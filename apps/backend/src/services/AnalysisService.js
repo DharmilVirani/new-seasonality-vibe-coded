@@ -36,7 +36,10 @@ function calculateStatistics(records, returnField = 'returnPercentage') {
       cumulativeReturn: 0,
       winRate: 0,
       maxGain: 0,
-      maxLoss: 0
+      maxLoss: 0,
+      cagr: 0,
+      sharpeRatio: 0,
+      stdDev: 0
     };
   }
 
@@ -54,6 +57,43 @@ function calculateStatistics(records, returnField = 'returnPercentage') {
   }
   const cumulativeReturn = (cumulative - 1) * 100; // Convert to percentage
 
+  // Calculate number of unique years
+  const uniqueYears = new Set(records.map(r => new Date(r.date).getFullYear()));
+  const numberOfYears = uniqueYears.size;
+
+  // Calculate CAGR: ((ending_value / 100) ^ (1 / number_of_years)) - 1) * 100
+  // cumulative is already the multiplier (e.g., 1.5 for 50% gain), so we use it directly
+  let cagr = 0;
+  if (numberOfYears > 0 && cumulative > 0) {
+    cagr = (Math.pow(cumulative, 1 / numberOfYears) - 1) * 100;
+  }
+  
+  // Debug logging
+  console.log('CAGR Calculation:', {
+    numberOfYears,
+    cumulative,
+    cumulativeReturn,
+    cagr,
+    recordCount: records.length
+  });
+
+  // Calculate Standard Deviation
+  const avgReturn = avg(returns);
+  let stdDev = 0;
+  if (returns.length > 1) {
+    const squaredDiffs = returns.map(r => Math.pow(r - avgReturn, 2));
+    const sumSquaredDiffs = sum(squaredDiffs);
+    stdDev = Math.sqrt(sumSquaredDiffs / returns.length);
+  }
+
+  // Calculate Sharpe Ratio: (avgReturn - riskFreeRate) / stdDev
+  // Assuming risk-free rate of 0 for simplicity (can be parameterized later)
+  const riskFreeRate = 0;
+  let sharpeRatio = 0;
+  if (stdDev !== 0) {
+    sharpeRatio = (avgReturn - riskFreeRate) / stdDev;
+  }
+
   return {
     totalCount: records.length,
     positiveCount: positiveReturns.length,
@@ -67,7 +107,10 @@ function calculateStatistics(records, returnField = 'returnPercentage') {
     cumulativeReturn: Number(cumulativeReturn.toFixed(2)),
     winRate: Number(((positiveReturns.length / records.length) * 100).toFixed(2)),
     maxGain: Number(Math.max(...returns, 0).toFixed(4)),
-    maxLoss: Number(Math.min(...returns, 0).toFixed(4))
+    maxLoss: Number(Math.min(...returns, 0).toFixed(4)),
+    cagr: Number(cagr.toFixed(2)),
+    sharpeRatio: Number(sharpeRatio.toFixed(2)),
+    stdDev: Number(stdDev.toFixed(4))
   };
 }
 

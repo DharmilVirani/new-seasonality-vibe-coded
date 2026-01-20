@@ -10,6 +10,7 @@ const userRoutes = require('./userRoutes');
 const analysisRoutes = require('./analysisRoutes');
 const uploadRoutes = require('./uploadRoutes');
 const filesRoutes = require('./filesRoutes');
+const specialDaysRoutes = require('./specialDays');
 
 // Health check
 router.get('/health', async (req, res) => {
@@ -46,6 +47,7 @@ router.get('/', (req, res) => {
       analysis: '/api/analysis',
       upload: '/api/upload',
       files: '/api/files',
+      specialDays: '/api/special-days',
     },
     documentation: '/api/docs',
   });
@@ -57,5 +59,6 @@ router.use('/users', userRoutes);
 router.use('/analysis', analysisRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/files', filesRoutes);
+router.use('/special-days', specialDaysRoutes);
 
 module.exports = router;

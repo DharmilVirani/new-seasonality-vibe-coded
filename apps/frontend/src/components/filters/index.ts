@@ -5,3 +5,4 @@ export { MonthFilters } from './MonthFilters';
 export { WeekFilters } from './WeekFilters';
 export { DayFilters } from './DayFilters';
 export { OutlierFilters } from './OutlierFilters';
+export { SpecialDaysFilter } from './SpecialDaysFilter';

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -9,10 +9,7 @@ import {
   ArrowUpRight, ArrowDownRight, RefreshCw,
   Settings, LogOut
 } from 'lucide-react';
-import {
-  XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, ReferenceLine, Area, AreaChart
-} from 'recharts';
+import { createChart, ColorType } from 'lightweight-charts';
 
 import { analysisApi } from '@/lib/api';
 import { useAnalysisStore } from '@/store/analysisStore';
@@ -38,7 +35,7 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
 export default function DailyPage() {
   const { selectedSymbols, startDate, endDate, lastNDays, filters, chartScale } = useAnalysisStore();
   const [activeTab, setActiveTab] = useState('chart');
-  const [chartMode, setChartMode] = useState<'cumulative' | 'superimposed'>('cumulative');
+  const [chartMode, setChartMode] = useState<'cumulative' | 'superimposed' | 'yearly-overlay'>('cumulative');
   const [filterOpen, setFilterOpen] = useState(true);
   const [filterWidth, setFilterWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
@@ -99,10 +96,10 @@ export default function DailyPage() {
       // @ts-ignore - html2canvas types
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(chartRef.current, {
-        backgroundColor: '#ffffff',
+        background: '#ffffff',
         scale: 2,
         logging: false,
-      });
+      } as any);
       
       const link = document.createElement('a');
       link.download = `${selectedSymbols[0]}_${chartMode}_${new Date().toISOString().split('T')[0]}.png`;
@@ -302,10 +299,10 @@ export default function DailyPage() {
           <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 py-3">
             <div className="grid grid-cols-4 gap-4">
               <StatCard
-                label="AVG. ANNUAL RETURN"
-                value={`${(stats.avgReturnAll || 0).toFixed(2)}%`}
-                change="+2.1%"
-                trend={(stats.avgReturnAll || 0) >= 0 ? 'up' : 'down'}
+                label="CAGR"
+                value={`${(stats.cagr || 0).toFixed(2)}%`}
+                subtitle={`Avg: ${(stats.avgReturnAll || 0).toFixed(2)}%`}
+                trend={(stats.cagr || 0) >= 0 ? 'up' : 'down'}
               />
               <StatCard
                 label="WIN RATE"
@@ -316,14 +313,18 @@ export default function DailyPage() {
               <StatCard
                 label="MAX DRAWDOWN"
                 value={`${(stats.maxLoss || 0).toFixed(2)}%`}
-                subtitle={`Ø3 ${new Date().getFullYear()}`}
+                subtitle={`Max Gain: ${(stats.maxGain || 0).toFixed(2)}%`}
                 trend="down"
               />
               <StatCard
                 label="SHARPE RATIO"
-                value="1.92"
-                subtitle="Excellent"
-                trend="up"
+                value={(stats.sharpeRatio || 0).toFixed(2)}
+                subtitle={
+                  stats.sharpeRatio > 2 ? 'Excellent' :
+                  stats.sharpeRatio > 1 ? 'Good' :
+                  stats.sharpeRatio > 0 ? 'Fair' : 'Poor'
+                }
+                trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
               />
             </div>
           </div>
@@ -335,7 +336,9 @@ export default function DailyPage() {
             {/* Chart Header */}
             <div className="flex-shrink-0 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-700">
-                {chartMode === 'cumulative' ? 'Seasonal Probability Matrix' : 'Superimposed Daily Chart'}
+                {chartMode === 'cumulative' ? 'Cumulative Returns' : 
+                 chartMode === 'superimposed' ? 'Superimposed Pattern' : 
+                 'Yearly Overlay Pattern'}
               </h3>
               <div className="flex items-center gap-2">
                 {/* Chart Mode Toggle */}
@@ -361,6 +364,17 @@ export default function DailyPage() {
                     )}
                   >
                     Superimposed
+                  </button>
+                  <button
+                    onClick={() => setChartMode('yearly-overlay')}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                      chartMode === 'yearly-overlay' 
+                        ? "bg-white text-indigo-600 shadow-sm" 
+                        : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    Yearly Overlay
                   </button>
                 </div>
                 
@@ -447,12 +461,17 @@ export default function DailyPage() {
                   >
                     {activeTab === 'chart' ? (
                       chartMode === 'cumulative' ? (
-                        <ChartOnly 
+                        <CumulativeChart 
                           data={symbolData.chartData} 
                           chartScale={chartScale}
                         />
+                      ) : chartMode === 'superimposed' ? (
+                        <SuperimposedChart 
+                          data={symbolData.chartData}
+                          symbol={selectedSymbols[0]}
+                        />
                       ) : (
-                        <SuperimposedChartView 
+                        <YearlyOverlayChart 
                           data={symbolData.chartData}
                           symbol={selectedSymbols[0]}
                         />
@@ -541,224 +560,463 @@ function FilterSection({ title, children, defaultOpen = false }: {
   );
 }
 
-// Chart Component
-function ChartOnly({ data, chartScale }: { 
+// Cumulative Chart Component using TradingView lightweight-charts
+function CumulativeChart({ data, chartScale }: { 
   data: any[]; 
   chartScale: 'linear' | 'log';
 }) {
-  const [zoomDomain, setZoomDomain] = useState<{ start: number; end: number } | null>(null);
-  const chartContainerRef = React.useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; date: string; value: number } | null>(null);
 
-  const chartData = useMemo(() => {
-    if (!data || !Array.isArray(data)) {
-      return [];
-    }
-    
-    return data.map((d: any, index: number) => {
-      const date = new Date(d.date);
-      return {
-        ...d,
-        originalIndex: index,
-        fullDate: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-        yearLabel: date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
-        year: date.getFullYear(),
-        month: date.getMonth(),
-        cumulativeReturn: d.cumulative || 0,
-      };
-    });
-  }, [data]);
-
-  // Visible data based on zoom
-  const visibleData = useMemo(() => {
-    const baseData = zoomDomain && chartData.length > 0 
-      ? chartData.slice(zoomDomain.start, zoomDomain.end + 1)
-      : chartData;
-    
-    return baseData.map((d, idx) => ({
-      ...d,
-      index: idx
-    }));
-  }, [chartData, zoomDomain]);
-
-  // Calculate which indices should show year labels for visible data
-  const yearTickIndices = useMemo(() => {
-    const indices: number[] = [];
-    const seenYears = new Set<number>();
-    
-    visibleData.forEach((d, idx) => {
-      // Show label for January of each year
-      if (d.month === 0 && !seenYears.has(d.year)) {
-        seenYears.add(d.year);
-        indices.push(idx);
-      }
-    });
-    
-    // If no January found, show labels at regular intervals
-    if (indices.length === 0 && visibleData.length > 0) {
-      const numLabels = Math.min(10, Math.ceil(visibleData.length / 200));
-      const step = Math.floor(visibleData.length / numLabels);
-      for (let i = 0; i < visibleData.length; i += step) {
-        indices.push(i);
-      }
-      // Always include the last point
-      if (indices[indices.length - 1] !== visibleData.length - 1) {
-        indices.push(visibleData.length - 1);
-      }
-    }
-    
-    return indices;
-  }, [visibleData]);
-
-  // Handle mouse wheel zoom
   useEffect(() => {
-    const container = chartContainerRef.current;
-    if (!container || chartData.length === 0) return;
+    if (!chartContainerRef.current || !data || data.length === 0) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      
-      // Shift + scroll for horizontal panning
-      if (e.shiftKey) {
-        setZoomDomain((prev) => {
-          const currentStart = prev?.start ?? 0;
-          const currentEnd = prev?.end ?? chartData.length - 1;
-          const currentRange = currentEnd - currentStart;
-          
-          // Pan amount based on scroll direction
-          const panAmount = Math.round(currentRange * 0.1);
-          const delta = e.deltaY > 0 ? panAmount : -panAmount;
-          
-          let newStart = currentStart + delta;
-          let newEnd = currentEnd + delta;
-          
-          // Boundary checks
-          if (newStart < 0) {
-            newStart = 0;
-            newEnd = currentRange;
-          }
-          if (newEnd >= chartData.length) {
-            newEnd = chartData.length - 1;
-            newStart = Math.max(0, newEnd - currentRange);
-          }
-          
-          // If at full view, don't pan
-          if (currentRange >= chartData.length) {
-            return null;
-          }
-          
-          return { start: newStart, end: newEnd };
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: '#ffffff' },
+        textColor: '#64748b',
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+      grid: {
+        vertLines: { color: '#e2e8f0' },
+        horzLines: { color: '#e2e8f0' },
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: {
+          width: 1,
+          color: '#4F46E5',
+          style: 2,
+        },
+        horzLine: {
+          width: 1,
+          color: '#4F46E5',
+          style: 2,
+        },
+      },
+    });
+
+    chartRef.current = chart;
+
+    const areaSeries = chart.addAreaSeries({
+      lineColor: '#4F46E5',
+      topColor: 'rgba(79, 70, 229, 0.4)',
+      bottomColor: 'rgba(79, 70, 229, 0.0)',
+      lineWidth: 2,
+    });
+
+    const chartData = data.map((d: any) => ({
+      time: Math.floor(new Date(d.date).getTime() / 1000) as any,
+      value: d.cumulative || 0,
+      originalDate: d.date,
+    }));
+
+    areaSeries.setData(chartData);
+    chart.timeScale().fitContent();
+
+    // Tooltip handler
+    chart.subscribeCrosshairMove((param: any) => {
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        setTooltip(null);
+        return;
+      }
+
+      const dataPoint = param.seriesData.get(areaSeries);
+      if (dataPoint) {
+        const dateStr = new Date(param.time * 1000).toLocaleDateString('en-IN', { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
         });
-      } else {
-        // Regular scroll for zoom
-        const zoomFactor = 0.1;
-        const delta = e.deltaY > 0 ? 1 + zoomFactor : 1 - zoomFactor;
         
-        setZoomDomain((prev) => {
-          const currentStart = prev?.start ?? 0;
-          const currentEnd = prev?.end ?? chartData.length - 1;
-          const currentRange = currentEnd - currentStart;
-          
-          // Calculate new range
-          const newRange = Math.max(50, Math.min(chartData.length, Math.round(currentRange * delta)));
-          
-          // Keep zoom centered
-          const center = (currentStart + currentEnd) / 2;
-          let newStart = Math.round(center - newRange / 2);
-          let newEnd = Math.round(center + newRange / 2);
-          
-          // Boundary checks
-          if (newStart < 0) {
-            newStart = 0;
-            newEnd = newRange;
-          }
-          if (newEnd >= chartData.length) {
-            newEnd = chartData.length - 1;
-            newStart = Math.max(0, newEnd - newRange);
-          }
-          
-          // If fully zoomed out, reset
-          if (newRange >= chartData.length) {
-            return null;
-          }
-          
-          return { start: newStart, end: newEnd };
+        setTooltip({
+          visible: true,
+          x: param.point.x,
+          y: param.point.y,
+          date: dateStr,
+          value: dataPoint.value,
+        });
+      }
+    });
+
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
         });
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [chartData]);
+    window.addEventListener('resize', handleResize);
 
-  // Reset zoom on double click
-  const handleDoubleClick = () => {
-    setZoomDomain(null);
-  };
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, [data, chartScale]);
 
   return (
-    <div className="h-full w-full relative" ref={chartContainerRef} onDoubleClick={handleDoubleClick}>
-      {zoomDomain && (
-        <div className="absolute top-2 right-2 z-10 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 shadow-sm">
-          Showing: {visibleData.length} of {chartData.length} points • Shift+Scroll to pan • Double-click to reset
+    <div ref={chartContainerRef} className="h-full w-full relative">
+      {tooltip && tooltip.visible && (
+        <div
+          className="absolute pointer-events-none bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs z-50"
+          style={{
+            left: `${tooltip.x + 10}px`,
+            top: `${tooltip.y - 50}px`,
+          }}
+        >
+          <div className="font-semibold text-slate-700 mb-1">{tooltip.date}</div>
+          <div className="text-indigo-600 font-bold">
+            Cumulative: {tooltip.value.toFixed(2)}
+          </div>
         </div>
       )}
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={visibleData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-          <defs>
-            <linearGradient id="colorReturn" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.25}/>
-              <stop offset="100%" stopColor="#4F46E5" stopOpacity={0}/>
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" vertical={false} />
-          <XAxis
-            dataKey="index"
-            ticks={yearTickIndices}
-            tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }}
-            tickLine={false}
-            axisLine={{ stroke: '#e2e8f0' }}
-            tickFormatter={(value) => {
-              const point = visibleData[value];
-              return point ? point.yearLabel : '';
-            }}
-          />
-          <YAxis
-            scale={chartScale}
-            domain={['auto', 'auto']}
-            tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }}
-            tickLine={false}
-            axisLine={{ stroke: '#e2e8f0' }}
-            tickFormatter={(value: number) => `${value.toFixed(0)}`}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-              padding: '12px'
-            }}
-            itemStyle={{ fontSize: '12px', fontWeight: 600, color: '#4F46E5' }}
-            labelStyle={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}
-            formatter={(value: number) => [`${value.toFixed(2)}`, 'Cumulative']}
-            labelFormatter={(label, payload) => {
-              if (payload && payload[0]) {
-                return payload[0].payload.fullDate;
-              }
-              return label;
-            }}
-          />
-          <ReferenceLine y={100} stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 3" />
-          <Area
-            type="monotone"
-            dataKey="cumulativeReturn"
-            stroke="#4F46E5"
-            strokeWidth={2}
-            fill="url(#colorReturn)"
-            activeDot={{ r: 4, fill: '#4F46E5', stroke: '#fff', strokeWidth: 2 }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Superimposed Chart - Shows average pattern across all years
+function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; day: number; value: number; avgReturn: number } | null>(null);
+
+  // Calculate year range from data
+  const yearRange = useMemo(() => {
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+    
+    const years = data.map((d: any) => new Date(d.date).getFullYear());
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
+    const uniqueYears = new Set(years);
+    const yearCount = uniqueYears.size;
+    
+    return { minYear, maxYear, yearCount };
+  }, [data]);
+
+  useEffect(() => {
+    if (!chartContainerRef.current || !data || data.length === 0) return;
+
+    // Group by day-of-year and calculate average returns
+    const dayGroups: Record<number, number[]> = {};
+    
+    data.forEach((d: any) => {
+      const date = new Date(d.date);
+      const year = date.getFullYear();
+      const startOfYear = new Date(year, 0, 1);
+      const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      if (!dayGroups[dayOfYear]) {
+        dayGroups[dayOfYear] = [];
+      }
+      dayGroups[dayOfYear].push(d.returnPercentage || 0);
+    });
+
+    // Calculate average return for each day and compound it
+    const sortedDays = Object.keys(dayGroups).map(Number).sort((a, b) => a - b);
+    let compoundedValue = 1; // Start at 1 (100%)
+    
+    const superimposedData = sortedDays.map(day => {
+      const avgReturn = dayGroups[day].reduce((sum, val) => sum + val, 0) / dayGroups[day].length;
+      
+      // Compound: multiply by (1 + avgReturn/100)
+      compoundedValue = compoundedValue * (1 + avgReturn / 100);
+      
+      return {
+        day,
+        avgReturn,
+        compoundedReturn: (compoundedValue - 1) * 100, // Convert back to percentage
+      };
+    });
+
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: '#ffffff' },
+        textColor: '#64748b',
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+      grid: {
+        vertLines: { color: '#e2e8f0' },
+        horzLines: { color: '#e2e8f0' },
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: {
+          width: 1,
+          color: '#4F46E5',
+          style: 2,
+        },
+        horzLine: {
+          width: 1,
+          color: '#4F46E5',
+          style: 2,
+        },
+      },
+      timeScale: {
+        timeVisible: false,
+        secondsVisible: false,
+      },
+    });
+
+    chartRef.current = chart;
+
+    const areaSeries = chart.addAreaSeries({
+      lineColor: '#000000',
+      topColor: 'rgba(224, 231, 255, 0.4)',
+      bottomColor: 'rgba(224, 231, 255, 0.0)',
+      lineWidth: 2,
+    });
+
+    const chartData = superimposedData.map((d: any) => ({
+      time: d.day,
+      value: d.compoundedReturn,
+      avgReturn: d.avgReturn,
+    }));
+
+    areaSeries.setData(chartData);
+    
+    // Configure time scale to show day numbers
+    chart.timeScale().fitContent();
+    (chart.timeScale() as any).applyOptions({
+      tickMarkFormatter: (time: any) => {
+        return `Day ${time}`;
+      },
+    });
+
+    // Tooltip handler
+    chart.subscribeCrosshairMove((param: any) => {
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        setTooltip(null);
+        return;
+      }
+
+      const dataPoint = param.seriesData.get(areaSeries);
+      if (dataPoint) {
+        const originalData = superimposedData.find((d: any) => d.day === param.time);
+        
+        setTooltip({
+          visible: true,
+          x: param.point.x,
+          y: param.point.y,
+          day: param.time,
+          value: dataPoint.value,
+          avgReturn: originalData?.avgReturn || 0,
+        });
+      }
+    });
+
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, [data]);
+
+  return (
+    <div className="h-full w-full relative">
+      <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700">
+        {symbol} - {yearRange ? `${yearRange.yearCount} Years (${yearRange.minYear}-${yearRange.maxYear})` : 'All Years'}
+      </div>
+      <div ref={chartContainerRef} className="h-full w-full" />
+      {tooltip && tooltip.visible && (
+        <div
+          className="absolute pointer-events-none bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs z-50"
+          style={{
+            left: `${tooltip.x + 10}px`,
+            top: `${tooltip.y - 60}px`,
+          }}
+        >
+          <div className="font-semibold text-slate-700 mb-1">Day {tooltip.day}</div>
+          <div className="text-indigo-600 font-bold">
+            YTD Return: {tooltip.value.toFixed(2)}%
+          </div>
+          <div className="text-slate-600">
+            Avg Daily: {tooltip.avgReturn.toFixed(2)}%
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Yearly Overlay Chart - Shows each year's pattern overlaid
+function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; day: number; values: Array<{ year: string; value: number; color: string }> } | null>(null);
+
+  useEffect(() => {
+    if (!chartContainerRef.current || !data || data.length === 0) return;
+
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: '#ffffff' },
+        textColor: '#64748b',
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+      grid: {
+        vertLines: { color: '#e2e8f0' },
+        horzLines: { color: '#e2e8f0' },
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: {
+          width: 1,
+          color: '#4F46E5',
+          style: 2,
+        },
+        horzLine: {
+          width: 1,
+          color: '#4F46E5',
+          style: 2,
+        },
+      },
+    });
+
+    chartRef.current = chart;
+
+    // Group data by year
+    const yearGroups: Record<number, any[]> = {};
+    data.forEach((d: any) => {
+      const date = new Date(d.date);
+      const year = date.getFullYear();
+      const startOfYear = new Date(year, 0, 1);
+      const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      if (!yearGroups[year]) {
+        yearGroups[year] = [];
+      }
+      yearGroups[year].push({
+        dayOfYear,
+        returnPercentage: d.returnPercentage || 0,
+      });
+    });
+
+    // Create a line series for each year
+    const colors = [
+      '#4F46E5', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+      '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
+    ];
+
+    const seriesMap = new Map();
+
+    Object.entries(yearGroups).forEach(([year, yearData], index) => {
+      const color = colors[index % colors.length];
+      const lineSeries = chart.addLineSeries({
+        color,
+        lineWidth: 2,
+        title: year,
+      });
+
+      const lineData = yearData.map((d: any) => ({
+        time: d.dayOfYear,
+        value: d.returnPercentage,
+      }));
+
+      lineSeries.setData(lineData);
+      seriesMap.set(lineSeries, { year, color });
+    });
+
+    // Configure time scale to show day numbers
+    chart.timeScale().fitContent();
+    (chart.timeScale() as any).applyOptions({
+      tickMarkFormatter: (time: any) => {
+        return `Day ${time}`;
+      },
+    });
+
+    // Tooltip handler
+    chart.subscribeCrosshairMove((param: any) => {
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        setTooltip(null);
+        return;
+      }
+
+      const values: Array<{ year: string; value: number; color: string }> = [];
+      
+      seriesMap.forEach((info, series) => {
+        const dataPoint = param.seriesData.get(series);
+        if (dataPoint) {
+          values.push({
+            year: info.year,
+            value: dataPoint.value,
+            color: info.color,
+          });
+        }
+      });
+
+      if (values.length > 0) {
+        setTooltip({
+          visible: true,
+          x: param.point.x,
+          y: param.point.y,
+          day: param.time,
+          values,
+        });
+      }
+    });
+
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, [data]);
+
+  return (
+    <div ref={chartContainerRef} className="h-full w-full relative">
+      {tooltip && tooltip.visible && (
+        <div
+          className="absolute pointer-events-none bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs z-50 max-h-64 overflow-y-auto"
+          style={{
+            left: `${tooltip.x + 10}px`,
+            top: `${tooltip.y - 80}px`,
+          }}
+        >
+          <div className="font-semibold text-slate-700 mb-2">Day {tooltip.day}</div>
+          <div className="space-y-1">
+            {tooltip.values.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded-full" 
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-slate-600">{item.year}:</span>
+                </div>
+                <span className="font-bold" style={{ color: item.color }}>
+                  {item.value.toFixed(2)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -839,206 +1097,6 @@ function SeasonalDataTable({ data }: {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Superimposed Chart View - Shows average daily pattern across all years
-function SuperimposedChartView({ data, symbol }: { data: any[]; symbol: string }) {
-  const [zoomDomain, setZoomDomain] = useState<{ start: number; end: number } | null>(null);
-  const chartContainerRef = React.useRef<HTMLDivElement>(null);
-
-  // Calculate average returns by day-of-year across all years
-  const chartData = useMemo(() => {
-    if (!data || !Array.isArray(data)) return [];
-
-    // Group by day-of-year and calculate average return
-    const dayGroups: Record<number, number[]> = {};
-    
-    data.forEach((d) => {
-      const date = new Date(d.date);
-      const year = date.getFullYear();
-      const startOfYear = new Date(year, 0, 1);
-      const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      
-      if (!dayGroups[dayOfYear]) {
-        dayGroups[dayOfYear] = [];
-      }
-      
-      // Use returnPercentage (daily change), not cumulative
-      dayGroups[dayOfYear].push(d.returnPercentage || 0);
-    });
-
-    // Calculate average return for each day and compound it starting from 0
-    const sortedDays = Object.keys(dayGroups).map(Number).sort((a, b) => a - b);
-    let compoundedValue = 0; // Start at 0%
-    
-    return sortedDays.map(day => {
-      const avgReturn = dayGroups[day].reduce((sum, val) => sum + val, 0) / dayGroups[day].length;
-      
-      // Compound: (1 + previous%) * (1 + daily%) - 1
-      compoundedValue = ((1 + compoundedValue / 100) * (1 + avgReturn / 100) - 1) * 100;
-      
-      return {
-        day,
-        avgReturn,
-        compoundedReturn: compoundedValue,
-        count: dayGroups[day].length
-      };
-    });
-  }, [data]);
-
-  const visibleData = useMemo(() => {
-    if (!zoomDomain || chartData.length === 0) {
-      return chartData;
-    }
-    return chartData.slice(zoomDomain.start, zoomDomain.end + 1);
-  }, [chartData, zoomDomain]);
-
-  // Handle mouse wheel zoom and pan
-  useEffect(() => {
-    const container = chartContainerRef.current;
-    if (!container || chartData.length === 0) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      
-      // Shift + scroll for horizontal panning
-      if (e.shiftKey) {
-        setZoomDomain((prev) => {
-          const currentStart = prev?.start ?? 0;
-          const currentEnd = prev?.end ?? chartData.length - 1;
-          const currentRange = currentEnd - currentStart;
-          
-          // Pan amount based on scroll direction
-          const panAmount = Math.round(currentRange * 0.1);
-          const delta = e.deltaY > 0 ? panAmount : -panAmount;
-          
-          let newStart = currentStart + delta;
-          let newEnd = currentEnd + delta;
-          
-          // Boundary checks
-          if (newStart < 0) {
-            newStart = 0;
-            newEnd = currentRange;
-          }
-          if (newEnd >= chartData.length) {
-            newEnd = chartData.length - 1;
-            newStart = Math.max(0, newEnd - currentRange);
-          }
-          
-          // If at full view, don't pan
-          if (currentRange >= chartData.length) {
-            return null;
-          }
-          
-          return { start: newStart, end: newEnd };
-        });
-      } else {
-        // Regular scroll for zoom
-        const zoomFactor = 0.1;
-        const delta = e.deltaY > 0 ? 1 + zoomFactor : 1 - zoomFactor;
-        
-        setZoomDomain((prev) => {
-          const currentStart = prev?.start ?? 0;
-          const currentEnd = prev?.end ?? chartData.length - 1;
-          const currentRange = currentEnd - currentStart;
-          
-          const newRange = Math.max(50, Math.min(chartData.length, Math.round(currentRange * delta)));
-          
-          const center = (currentStart + currentEnd) / 2;
-          let newStart = Math.round(center - newRange / 2);
-          let newEnd = Math.round(center + newRange / 2);
-          
-          if (newStart < 0) {
-            newStart = 0;
-            newEnd = newRange;
-          }
-          if (newEnd >= chartData.length) {
-            newEnd = chartData.length - 1;
-            newStart = Math.max(0, newEnd - newRange);
-          }
-          
-          if (newRange >= chartData.length) {
-            return null;
-          }
-          
-          return { start: newStart, end: newEnd };
-        });
-      }
-    };
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [chartData]);
-
-  const handleDoubleClick = () => {
-    setZoomDomain(null);
-  };
-
-  return (
-    <div className="h-full w-full relative" ref={chartContainerRef} onDoubleClick={handleDoubleClick}>
-      {zoomDomain && (
-        <div className="absolute top-2 right-2 z-10 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 shadow-sm">
-          Showing: {visibleData.length} of {chartData.length} days • Shift+Scroll to pan • Double-click to reset
-        </div>
-      )}
-      <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700">
-        {symbol} - All Years
-      </div>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={visibleData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-          <defs>
-            <linearGradient id="superimposedGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#E0E7FF" stopOpacity={0.8}/>
-              <stop offset="100%" stopColor="#E0E7FF" stopOpacity={0.3}/>
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" vertical={false} />
-          <XAxis
-            dataKey="day"
-            tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }}
-            tickLine={false}
-            axisLine={{ stroke: '#e2e8f0' }}
-            label={{ value: 'Days', position: 'insideBottom', offset: -5, style: { fontSize: 12, fontWeight: 700, fill: '#1e293b' } }}
-          />
-          <YAxis
-            domain={[0, 'auto']}
-            tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }}
-            tickLine={false}
-            axisLine={{ stroke: '#e2e8f0' }}
-            tickFormatter={(value: number) => `${value.toFixed(2)}`}
-            label={{ value: 'Compounded Percentage Return', angle: -90, position: 'insideLeft', style: { fontSize: 12, fontWeight: 700, fill: '#1e293b' } }}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-              padding: '12px'
-            }}
-            labelStyle={{ fontSize: 12, fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}
-            itemStyle={{ fontSize: 11, fontWeight: 600 }}
-            formatter={(value: number, name: string) => {
-              if (name === 'compoundedReturn') return [`${value.toFixed(2)}%`, 'YTD Return'];
-              return [`${value.toFixed(2)}%`, 'Daily Change'];
-            }}
-            labelFormatter={(label) => `Day ${label}`}
-          />
-          <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="3 3" />
-          
-          <Area
-            type="monotone"
-            dataKey="compoundedReturn"
-            stroke="#000000"
-            strokeWidth={2}
-            fill="url(#superimposedGradient)"
-            dot={false}
-            name="compoundedReturn"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
     </div>
   );
 }

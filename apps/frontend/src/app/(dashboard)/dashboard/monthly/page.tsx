@@ -66,15 +66,15 @@ export default function MonthlyPage() {
                 />
                 <StatsBox 
                   icon={<TrendingUp className="h-4 w-4" />}
-                  label="Avg Return" 
-                  value={`${(stats.avgReturnAll || 0).toFixed(2)}%`}
-                  valueColor={(stats.avgReturnAll || 0) >= 0 ? 'text-green-600' : 'text-red-600'}
+                  label="CAGR" 
+                  value={`${(stats.cagr || 0).toFixed(2)}%`}
+                  valueColor={(stats.cagr || 0) >= 0 ? 'text-green-600' : 'text-red-600'}
                 />
                 <StatsBox 
                   icon={<Percent className="h-4 w-4" />}
-                  label="Total Return" 
-                  value={`${(stats.sumReturnAll || 0).toFixed(2)}%`}
-                  valueColor={(stats.sumReturnAll || 0) >= 0 ? 'text-green-600' : 'text-red-600'}
+                  label="Sharpe Ratio" 
+                  value={(stats.sharpeRatio || 0).toFixed(2)}
+                  valueColor={(stats.sharpeRatio || 0) > 0 ? 'text-green-600' : 'text-red-600'}
                 />
                 <div className="h-8 w-px bg-border" />
                 <StatsBox 

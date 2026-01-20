@@ -5,6 +5,7 @@ export interface FilterConfig {
   weekFilters?: WeekFilters;
   dayFilters?: DayFilters;
   outlierFilters?: OutlierFilters;
+  specialDaysFilters?: SpecialDaysFilters;
 }
 
 export interface YearFilters {
@@ -42,6 +43,10 @@ export interface OutlierFilters {
   weeklyPercentageRange?: { enabled: boolean; min: number; max: number };
   monthlyPercentageRange?: { enabled: boolean; min: number; max: number };
   yearlyPercentageRange?: { enabled: boolean; min: number; max: number };
+}
+
+export interface SpecialDaysFilters {
+  selectedDays?: string[]; // Array of special day names to filter by
 }
 
 // Analysis Response Types

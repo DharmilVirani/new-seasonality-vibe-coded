@@ -64,6 +64,9 @@ const defaultFilters: FilterConfig = {
     monthlyPercentageRange: { enabled: false, min: -25, max: 25 },
     yearlyPercentageRange: { enabled: false, min: -50, max: 50 },
   },
+  specialDaysFilters: {
+    selectedDays: [],
+  },
 };
 
 export const useAnalysisStore = create<AnalysisState>((set) => ({

@@ -8,7 +8,7 @@ export function DateRangePicker() {
   const { startDate, endDate, lastNDays, setDateRange, setLastNDays } = useAnalysisStore();
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="flex flex-col gap-4">
       <div className="space-y-2">
         <Label>Start Date</Label>
         <Input
@@ -25,7 +25,7 @@ export function DateRangePicker() {
           onChange={(e) => setDateRange(startDate, e.target.value)}
         />
       </div>
-      <div className="col-span-2 space-y-2">
+      <div className="space-y-2">
         <Label>Last N Days (0 to disable)</Label>
         <Input
           type="number"

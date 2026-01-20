@@ -15,7 +15,7 @@ export function WeekFilters({ weekType = 'expiry' }: { weekType?: 'expiry' | 'mo
     <div className="filter-section">
       <h3 className="text-lg font-semibold text-primary mb-4">{title}</h3>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="flex flex-col gap-4">
         <div className="space-y-2">
           <Label>Positive/Negative Weeks</Label>
           <Select
