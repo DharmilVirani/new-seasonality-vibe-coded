@@ -9,6 +9,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
+const passport = require('./config/passport');
 
 const config = require('./config');
 const routes = require('./routes');
@@ -42,6 +43,10 @@ app.use(cors({
 
 // Handle preflight requests
 app.options('*', cors());
+
+// Initialize Passport
+app.use(passport.initialize());
+
 // Compression
 app.use(compression());
 
@@ -124,13 +129,13 @@ const startServer = async () => {
     // Graceful shutdown
     const shutdown = async (signal) => {
       logger.info(`${signal} received, shutting down gracefully`);
-      
+
       server.close(async () => {
         logger.info('HTTP server closed');
-        
+
         await prisma.$disconnect();
         logger.info('Database disconnected');
-        
+
         process.exit(0);
       });
 

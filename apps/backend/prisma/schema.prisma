@@ -36,8 +36,11 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   name      String
-  password  String
+  password  String?  // Optional for OAuth users
   role      UserRole @default(user)
+  
+  // OAuth fields
+  googleId  String?  @unique
   
   // Subscription management
   subscriptionTier    SubscriptionTier @default(trial)
@@ -63,6 +66,7 @@ model User {
   @@index([email])
   @@index([subscriptionTier])
   @@index([isActive])
+  @@index([googleId])
 }
 
 model ApiKey {

@@ -181,7 +181,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  
+
   const [mouseX, setMouseX] = useState<number>(0);
   const [mouseY, setMouseY] = useState<number>(0);
   const [isTealBlinking, setIsTealBlinking] = useState(false);
@@ -190,14 +190,14 @@ export default function RegisterPage() {
   const [isLimeBlinking, setIsLimeBlinking] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
-  
+
   // Unique animations for register page
   const [isWaving, setIsWaving] = useState(true); // Wave on page load
   const [isBouncing, setIsBouncing] = useState(false); // Bounce when typing
   const [isCelebrating, setIsCelebrating] = useState(false); // Celebrate when form is filled
   const [filledFields, setFilledFields] = useState(0);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false); // Track if typing in password fields
-  
+
   const tealRef = useRef<HTMLDivElement>(null);
   const slateRef = useRef<HTMLDivElement>(null);
   const pinkRef = useRef<HTMLDivElement>(null);
@@ -254,7 +254,7 @@ export default function RegisterPage() {
     if (password.length > 0) count++;
     if (confirmPassword.length > 0) count++;
     setFilledFields(count);
-    
+
     // Celebrate when all fields are filled
     if (count === 4 && !isCelebrating) {
       setIsCelebrating(true);
@@ -295,7 +295,7 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (password !== confirmPassword) {
       toast.error('Passwords do not match');
       return;
@@ -319,12 +319,12 @@ export default function RegisterPage() {
         status: error.response?.status,
         config: error.config
       });
-      
-      const message = error.response?.data?.error?.message || 
-                     error.response?.data?.message || 
-                     error.response?.data?.error || 
-                     error.message ||
-                     'Registration failed';
+
+      const message = error.response?.data?.error?.message ||
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Registration failed';
       toast.error(message);
     }
   };
@@ -332,11 +332,11 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        isVisible={isLoading || isRedirecting} 
-        text={isRedirecting ? "Redirecting to login..." : "Creating account..."} 
+      <LoadingOverlay
+        isVisible={isLoading || isRedirecting}
+        text={isRedirecting ? "Redirecting to login..." : "Creating account..."}
       />
-      
+
       {/* Left Content Section */}
       <div className="relative hidden lg:flex flex-col justify-between bg-gradient-to-br from-emerald-600/90 via-emerald-600 to-emerald-700/80 p-12 text-white">
         <div className="relative z-20">
@@ -351,7 +351,7 @@ export default function RegisterPage() {
         <div className="relative z-20 flex items-end justify-center h-[500px]">
           {/* Cartoon Characters with unique register page animations */}
           <div className="relative" style={{ width: '550px', height: '400px' }}>
-            
+
             {/* Teal tall rectangle character - Back layer - WAVES on load */}
             <div
               ref={tealRef}
@@ -363,12 +363,12 @@ export default function RegisterPage() {
                 backgroundColor: '#14B8A6',
                 borderRadius: '10px 10px 0 0',
                 zIndex: 1,
-                transform: isCelebrating 
-                  ? 'rotate(-5deg) translateY(-20px)' 
-                  : isWaving 
-                    ? 'rotate(8deg)' 
-                    : isBouncing 
-                      ? 'translateY(-15px)' 
+                transform: isCelebrating
+                  ? 'rotate(-5deg) translateY(-20px)'
+                  : isWaving
+                    ? 'rotate(8deg)'
+                    : isBouncing
+                      ? 'translateY(-15px)'
                       : 'rotate(0deg)',
                 transformOrigin: 'bottom center',
               }}
@@ -437,12 +437,12 @@ export default function RegisterPage() {
                 backgroundColor: '#334155',
                 borderRadius: '8px 8px 0 0',
                 zIndex: 2,
-                transform: isCelebrating 
-                  ? 'translateY(-30px) scale(1.05)' 
-                  : isWaving 
-                    ? 'translateY(-10px)' 
-                    : isBouncing 
-                      ? 'translateY(-25px) scale(1.02)' 
+                transform: isCelebrating
+                  ? 'translateY(-30px) scale(1.05)'
+                  : isWaving
+                    ? 'translateY(-10px)'
+                    : isBouncing
+                      ? 'translateY(-25px) scale(1.02)'
                       : 'translateY(0)',
                 transformOrigin: 'bottom center',
               }}
@@ -496,12 +496,12 @@ export default function RegisterPage() {
                 zIndex: 3,
                 backgroundColor: '#F472B6',
                 borderRadius: '120px 120px 0 0',
-                transform: isCelebrating 
-                  ? 'rotate(5deg) scale(1.05)' 
-                  : isWaving 
-                    ? 'rotate(-5deg)' 
-                    : isBouncing 
-                      ? 'rotate(3deg)' 
+                transform: isCelebrating
+                  ? 'rotate(5deg) scale(1.05)'
+                  : isWaving
+                    ? 'rotate(-5deg)'
+                    : isBouncing
+                      ? 'rotate(3deg)'
                       : 'rotate(0deg)',
                 transformOrigin: 'bottom center',
               }}
@@ -555,12 +555,12 @@ export default function RegisterPage() {
                 backgroundColor: '#A3E635',
                 borderRadius: '70px 70px 0 0',
                 zIndex: 4,
-                transform: isCelebrating 
-                  ? 'rotate(-8deg) translateY(-15px)' 
-                  : isWaving 
-                    ? 'rotate(6deg)' 
-                    : isBouncing 
-                      ? 'rotate(-4deg)' 
+                transform: isCelebrating
+                  ? 'rotate(-8deg) translateY(-15px)'
+                  : isWaving
+                    ? 'rotate(6deg)'
+                    : isBouncing
+                      ? 'rotate(-4deg)'
                       : 'rotate(0deg)',
                 transformOrigin: 'bottom center',
               }}
@@ -609,9 +609,8 @@ export default function RegisterPage() {
               {[0, 1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    i < filledFields ? 'bg-white scale-125' : 'bg-white/30'
-                  }`}
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${i < filledFields ? 'bg-white scale-125' : 'bg-white/30'
+                    }`}
                 />
               ))}
             </div>
@@ -634,7 +633,7 @@ export default function RegisterPage() {
         <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
         <div className="absolute top-1/4 right-1/4 size-64 bg-white/10 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 left-1/4 size-96 bg-white/5 rounded-full blur-3xl" />
-        
+
         {/* Wave animation keyframes */}
         <style jsx>{`
           @keyframes wave {
@@ -772,6 +771,9 @@ export default function RegisterPage() {
               variant="outline"
               className="w-full h-12 bg-background border-border/60 hover:bg-accent"
               type="button"
+              onClick={() => {
+                window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`;
+              }}
             >
               <Mail className="mr-2 size-5" />
               Sign up with Google

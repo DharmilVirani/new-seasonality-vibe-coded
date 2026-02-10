@@ -303,20 +303,20 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     console.log('Login form submitted with:', { email, password: '***' });
     console.log('API URL:', process.env.NEXT_PUBLIC_API_URL);
-    
+
     try {
       console.log('Calling login function...');
       await login(email, password);
       console.log('Login function completed successfully');
       toast.success('Login successful!');
-      
+
       // Get user from store after login
       const { user } = useAuthStore.getState();
       console.log('User after login:', user);
-      
+
       // Redirect admin users to admin panel, others to dashboard
       setIsRedirecting(true); // Start redirect loading
       if (user?.role === 'admin') {
@@ -334,12 +334,12 @@ export default function LoginPage() {
         status: error.response?.status,
         config: error.config
       });
-      
-      const message = error.response?.data?.error?.message || 
-                     error.response?.data?.message || 
-                     error.response?.data?.error || 
-                     error.message ||
-                     'Login failed';
+
+      const message = error.response?.data?.error?.message ||
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Login failed';
       toast.error(message);
     }
   };
@@ -347,11 +347,11 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        isVisible={isLoading || isRedirecting} 
-        text={isRedirecting ? "Redirecting..." : "Signing in..."} 
+      <LoadingOverlay
+        isVisible={isLoading || isRedirecting}
+        text={isRedirecting ? "Redirecting..." : "Signing in..."}
       />
-      
+
       {/* Left Content Section */}
       <div className="relative hidden lg:flex flex-col justify-between bg-purple-800 to-primary/80 p-12 text-primary-foreground">
         <div className="relative z-20">
@@ -380,7 +380,7 @@ export default function LoginPage() {
                 transform: (password.length > 0 && showPassword)
                   ? `skewX(0deg)`
                   : (isTyping || (password.length > 0 && !showPassword))
-                    ? `skewX(${(purplePos.bodySkew || 0) - 12}deg) translateX(40px)` 
+                    ? `skewX(${(purplePos.bodySkew || 0) - 12}deg) translateX(40px)`
                     : `skewX(${purplePos.bodySkew || 0}deg)`,
                 transformOrigin: 'bottom center',
               }}
@@ -432,7 +432,7 @@ export default function LoginPage() {
                   : isLookingAtEachOther
                     ? `skewX(${(blackPos.bodySkew || 0) * 1.5 + 10}deg) translateX(20px)`
                     : (isTyping || (password.length > 0 && !showPassword))
-                      ? `skewX(${(blackPos.bodySkew || 0) * 1.5}deg)` 
+                      ? `skewX(${(blackPos.bodySkew || 0) * 1.5}deg)`
                       : `skewX(${blackPos.bodySkew || 0}deg)`,
                 transformOrigin: 'bottom center',
               }}
@@ -647,6 +647,9 @@ export default function LoginPage() {
               variant="outline"
               className="w-full h-12 bg-background border-border/60 hover:bg-accent border border-purple-800"
               type="button"
+              onClick={() => {
+                window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`;
+              }}
             >
               <Mail className="mr-2 size-5 " />
               Log in with Google

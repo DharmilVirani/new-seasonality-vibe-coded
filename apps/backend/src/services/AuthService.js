@@ -8,10 +8,10 @@ const crypto = require('crypto');
 const prisma = require('../utils/prisma');
 const config = require('../config');
 const { logger } = require('../utils/logger');
-const { 
-  AuthenticationError, 
-  ValidationError, 
-  NotFoundError 
+const {
+  AuthenticationError,
+  ValidationError,
+  NotFoundError
 } = require('../utils/errors');
 
 // Password complexity requirements
@@ -35,7 +35,7 @@ class AuthService {
   async register(userData) {
     try {
       logger.info('Registration attempt started', { email: userData.email });
-      
+
       const { email, password, name } = userData;
 
       // Validate email format
@@ -51,7 +51,7 @@ class AuthService {
       }
 
       logger.info('Checking if user exists', { email });
-      
+
       // Check if user already exists
       const existingUser = await prisma.user.findUnique({
         where: { email: email.toLowerCase() },
@@ -64,12 +64,12 @@ class AuthService {
       }
 
       logger.info('Hashing password', { email });
-      
+
       // Hash password with fewer rounds for speed
       const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
       logger.info('Creating user in database', { email });
-      
+
       // Create user with trial subscription
       const user = await prisma.user.create({
         data: {
@@ -117,10 +117,10 @@ class AuthService {
         message: 'Registration successful',
       };
     } catch (error) {
-      logger.error('Registration failed', { 
-        email: userData.email, 
+      logger.error('Registration failed', {
+        email: userData.email,
         error: error.message,
-        stack: error.stack 
+        stack: error.stack
       });
       throw error;
     }
@@ -132,7 +132,7 @@ class AuthService {
   async login(email, password, ipAddress, userAgent) {
     try {
       logger.info('Login attempt started', { email });
-      
+
       // Find user with only needed fields
       const user = await prisma.user.findUnique({
         where: { email: email.toLowerCase() },
@@ -145,6 +145,7 @@ class AuthService {
           isActive: true,
           subscriptionTier: true,
           subscriptionExpiry: true,
+          googleId: true,
         },
       });
 
@@ -162,8 +163,14 @@ class AuthService {
         throw new AuthenticationError('Account is deactivated. Please contact support.');
       }
 
+      // Check if user registered with Google OAuth (no password)
+      if (user.googleId && !user.password) {
+        logger.warn('Login failed: OAuth user trying password login', { email });
+        throw new AuthenticationError('Please sign in with Google');
+      }
+
       logger.info('Verifying password', { email });
-      
+
       // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
@@ -200,10 +207,56 @@ class AuthService {
         ...tokens,
       };
     } catch (error) {
-      logger.error('Login failed', { 
-        email, 
+      logger.error('Login failed', {
+        email,
         error: error.message,
-        stack: error.stack 
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Google OAuth login/register
+   */
+  async googleAuth(user, ipAddress, userAgent) {
+    try {
+      logger.info('Google OAuth authentication', { userId: user.id });
+
+      // Update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLogin: new Date() },
+      }).catch(err => logger.error('Failed to update last login:', err));
+
+      // Generate tokens
+      const tokens = this.generateTokens(user.id);
+
+      // Log successful login
+      await this.logAuditEvent('USER_LOGIN', user.id, {
+        ipAddress,
+        userAgent,
+        method: 'google_oauth'
+      });
+
+      logger.info(`Google OAuth successful: ${user.email}`);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          subscriptionTier: user.subscriptionTier,
+          subscriptionExpiry: user.subscriptionExpiry,
+        },
+        ...tokens,
+      };
+    } catch (error) {
+      logger.error('Google OAuth failed', {
+        userId: user.id,
+        error: error.message,
+        stack: error.stack
       });
       throw error;
     }
@@ -215,7 +268,7 @@ class AuthService {
   async refreshToken(refreshToken) {
     try {
       const decoded = jwt.verify(refreshToken, config.jwt.secret);
-      
+
       if (decoded.type !== 'refresh') {
         throw new AuthenticationError('Invalid refresh token');
       }
@@ -275,7 +328,7 @@ class AuthService {
     // In production: Send email with reset link
     logger.info(`Password reset requested for: ${email}`);
 
-    return { 
+    return {
       message: 'If the email exists, a reset link will be sent.',
       // In development, return token for testing
       ...(process.env.NODE_ENV === 'development' && { resetToken }),
@@ -360,7 +413,7 @@ class AuthService {
     }
 
     // Calculate subscription status
-    const isSubscriptionActive = user.subscriptionExpiry 
+    const isSubscriptionActive = user.subscriptionExpiry
       ? new Date(user.subscriptionExpiry) > new Date()
       : false;
 
@@ -459,7 +512,7 @@ class AuthService {
   async logAuditEvent(eventType, userId, details) {
     // Only log critical events to reduce database load
     const criticalEvents = ['USER_REGISTERED', 'USER_LOGIN', 'PASSWORD_CHANGED', 'FAILED_LOGIN'];
-    
+
     if (!criticalEvents.includes(eventType)) {
       return; // Skip non-critical events
     }
