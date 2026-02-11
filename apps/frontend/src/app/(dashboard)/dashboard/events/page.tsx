@@ -6,7 +6,8 @@ import {
   Play, Filter,
   ChevronDown, ChevronRight,
   RefreshCw,
-  Zap
+  Zap,
+  HelpCircle
 } from 'lucide-react';
 
 import { analysisApi } from '@/lib/api';
@@ -28,6 +29,59 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
     <RefreshCw className={cn("animate-spin text-violet-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
+
+// Tooltip Component
+function InfoTooltip({ content }: { content: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+  const handleMouseEnter = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top
+      });
+    }
+    setIsVisible(true);
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setIsVisible(false)}
+        className="ml-1.5 inline-flex items-center justify-center"
+        type="button"
+      >
+        <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-violet-600 transition-colors" />
+      </button>
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.15 }}
+            className="fixed z-[9999] w-64 px-3 py-2 bg-slate-900 text-white text-xs rounded-lg shadow-xl pointer-events-none"
+            style={{
+              left: `${position.x}px`,
+              top: `${position.y - 10}px`,
+              transform: 'translate(-50%, -100%)'
+            }}
+          >
+            <div className="relative">
+              {content}
+              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-slate-900" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export default function EventsPage() {
   const { selectedSymbols, startDate, endDate, chartScale } = useAnalysisStore();
@@ -373,30 +427,35 @@ export default function EventsPage() {
                 value={stats.totalEvents?.toString() || '0'}
                 trend="neutral"
                 subValue={selectedEventName || 'HOLI'}
+                tooltip="The total number of times this event occurred in the selected date range. Each occurrence represents a trading opportunity based on the event."
               />
               <StatCard
                 label="WIN RATE"
                 value={`${(stats.winRate || 0).toFixed(1)}%`}
                 trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
                 subValue={`${stats.winningEvents || 0} wins`}
+                tooltip="Percentage of event occurrences that resulted in positive returns. A win rate above 50% indicates the event tends to move the market favorably."
               />
               <StatCard
                 label="AVG RETURN"
                 value={`${(stats.avgReturn || 0).toFixed(2)}%`}
                 trend={(stats.avgReturn || 0) >= 0 ? 'up' : 'down'}
                 subValue={`Median: ${(stats.medianReturn || 0).toFixed(2)}%`}
+                tooltip="The average percentage return across all event occurrences. This shows the typical profit or loss you can expect when trading around this event."
               />
               <StatCard
                 label="SHARPE RATIO"
                 value={(stats.sharpeRatio || 0).toFixed(2)}
                 trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
                 subValue={stats.sharpeRatio > 1 ? 'Good' : 'Poor'}
+                tooltip="Risk-adjusted return metric. Values above 1 are considered good, above 2 are very good. It measures how much return you get per unit of risk taken."
               />
               <StatCard
                 label="PROFIT FACTOR"
                 value={(stats.profitFactor || 0).toFixed(2)}
                 trend={(stats.profitFactor || 0) > 1 ? 'up' : 'down'}
                 subValue={`Max DD: ${(stats.maxDrawdown || 0).toFixed(2)}%`}
+                tooltip="Ratio of gross profits to gross losses. A value above 1 means total profits exceed total losses. Higher values indicate more profitable trading patterns."
               />
             </div>
           )}
@@ -405,14 +464,9 @@ export default function EventsPage() {
           <div className="grid grid-cols-3 gap-5 h-[400px]">
             <div className="col-span-2 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden">
               <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800 text-sm">Average Event Pattern</h3>
-                <div className="flex gap-1.5">
-                  <button className="px-3 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded uppercase tracking-wide">
-                    Live
-                  </button>
-                  <button className="px-3 py-1 bg-white border border-slate-200 text-slate-500 text-[10px] font-semibold rounded uppercase tracking-wide hover:bg-slate-50 transition-colors">
-                    OHLC
-                  </button>
+                <div className="flex items-center">
+                  <h3 className="font-semibold text-slate-800 text-sm">Average Event Pattern</h3>
+                  <InfoTooltip content="Shows the average price movement pattern across all event occurrences. The X-axis represents days relative to the event (T0), and the Y-axis shows the cumulative return percentage." />
                 </div>
               </div>
               <div className="flex-1 w-full relative p-4">
@@ -440,7 +494,10 @@ export default function EventsPage() {
             {/* Cumulative Profit */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800 text-sm">Cumulative Profit</h3>
+                <div className="flex items-center">
+                  <h3 className="font-semibold text-slate-800 text-sm">Cumulative Profit</h3>
+                  <InfoTooltip content="Tracks the cumulative profit/loss over time if you had traded every occurrence of this event. An upward trend indicates consistent profitability." />
+                </div>
               </div>
               <div className="flex-1 w-full p-4 relative">
                 {cumulativeProfitData.length > 0 ? (
@@ -457,7 +514,10 @@ export default function EventsPage() {
             {/* Pattern Returns */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800 text-sm">Pattern Returns</h3>
+                <div className="flex items-center">
+                  <h3 className="font-semibold text-slate-800 text-sm">Pattern Returns</h3>
+                  <InfoTooltip content="Distribution of returns for each event occurrence. Green bars show profitable trades, red bars show losses. Helps identify consistency and outliers in the pattern." />
+                </div>
               </div>
               <div className="flex-1 w-full p-4 relative">
                 {patternReturnsData.length > 0 ? (
@@ -489,16 +549,18 @@ export default function EventsPage() {
   );
 }
 
-function StatCard({ label, value, subValue, trend }: {
+function StatCard({ label, value, subValue, trend, tooltip }: {
   label: string;
   value: string;
   subValue?: string;
   trend?: 'up' | 'down' | 'neutral';
+  tooltip?: string;
 }) {
   return (
     <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
-      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
+      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center">
         {label}
+        {tooltip && <InfoTooltip content={tooltip} />}
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
