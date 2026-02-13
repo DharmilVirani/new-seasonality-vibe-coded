@@ -202,7 +202,7 @@ export default function EventsPage() {
 
     let runningTotal = 0;
     return sortedEvents.map((event: any) => {
-      const ret = Number(event.returnPercent) || 0;
+      const ret = Number(event.returnPercentage) || 0;
       runningTotal += ret;
       return {
         date: event.eventDate,
@@ -219,7 +219,7 @@ export default function EventsPage() {
       .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
       .map((event: any) => ({
         date: event.eventDate,
-        returnPercentage: Number(event.returnPercent) || 0
+        returnPercentage: Number(event.returnPercentage) || 0
       }));
   }, [data?.eventOccurrences]);
 
@@ -426,7 +426,7 @@ export default function EventsPage() {
                 label="TOTAL EVENTS"
                 value={stats.totalEvents?.toString() || '0'}
                 trend="neutral"
-                subValue={selectedEventName || 'HOLI'}
+                subValue={selectedEventName || selectedCategory || 'All Events'}
                 tooltip="The total number of times this event occurred in the selected date range. Each occurrence represents a trading opportunity based on the event."
               />
               <StatCard
@@ -447,7 +447,7 @@ export default function EventsPage() {
                 label="SHARPE RATIO"
                 value={(stats.sharpeRatio || 0).toFixed(2)}
                 trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
-                subValue={stats.sharpeRatio > 1 ? 'Good' : 'Poor'}
+                subValue={(stats.sharpeRatio || 0) > 0 ? 'Good' : 'Poor'}
                 tooltip="Risk-adjusted return metric. Values above 1 are considered good, above 2 are very good. It measures how much return you get per unit of risk taken."
               />
               <StatCard
@@ -645,7 +645,7 @@ function EventDataTable({ data, symbol, mean, stdDev }: { data: any[], symbol: s
         </thead>
         <tbody className="divide-y divide-slate-100">
           {data.map((row: any, idx: number) => {
-            const zScore = stdDev !== 0 ? ((row.returnPercent || 0) - mean) / stdDev : 0;
+            const zScore = stdDev !== 0 ? ((row.returnPercentage || 0) - mean) / stdDev : 0;
             return (
               <tr key={idx} className="hover:bg-slate-50/50 transition-colors bg-white">
                 <td className="px-5 py-3.5 text-slate-700 text-xs font-medium">
@@ -656,12 +656,12 @@ function EventDataTable({ data, symbol, mean, stdDev }: { data: any[], symbol: s
                 <td className="px-5 py-3.5">
                   <span className={cn(
                     "px-2 py-1 rounded font-semibold text-[11px]",
-                    (row.returnPercent || 0) >= 0
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-red-50 text-red-700"
+                    (row.returnPercentage || 0) >= 0
+                      ? "bg-violet-50 text-violet-700"
+                      : "bg-violet-100 text-violet-500"
                   )}>
-                    {(row.returnPercent || 0) > 0 ? '+' : ''}
-                    {(row.returnPercent || 0).toFixed(2)}%
+                    {(row.returnPercentage || 0) > 0 ? '+' : ''}
+                    {(row.returnPercentage || 0).toFixed(2)}%
                   </span>
                 </td>
                 <td className="px-5 py-3.5">

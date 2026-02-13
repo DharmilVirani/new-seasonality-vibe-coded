@@ -14,7 +14,7 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
     const distributionData = useMemo(() => {
         if (!data || data.length === 0) return [];
 
-        const returns = data.map(d => d.returnPercent || 0);
+        const returns = data.map(d => d.returnPercentage || 0);
         const min = Math.floor(Math.min(...returns));
         const max = Math.ceil(Math.max(...returns));
 
@@ -54,7 +54,7 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
     const totalProfit = useMemo(() => {
         if (!data || data.length === 0) return 0;
         // Assuming 10k base as in design $23,005.10
-        const totalReturn = data.reduce((sum, d) => sum + (d.returnPercent || 0), 0);
+        const totalReturn = data.reduce((sum, d) => sum + (d.returnPercentage || 0), 0);
         return 10000 * (totalReturn / 100);
     }, [data]);
 

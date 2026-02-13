@@ -74,14 +74,14 @@ export function ReturnBarChart({
                   <p className="font-medium">{d.date}</p>
                   <div className="text-sm mt-1">
                     <span className="text-muted-foreground">Return: </span>
-                    <span className={d.isPositive ? 'text-green-600' : 'text-red-600'}>
+                    <span className={d.isPositive ? 'text-violet-600' : 'text-violet-400'}>
                       {d.returnPercentage >= 0 ? '+' : ''}{d.returnPercentage?.toFixed(2)}%
                     </span>
                   </div>
                   {showCumulative && (
                     <div className="text-sm">
                       <span className="text-muted-foreground">Cumulative: </span>
-                      <span className={d.cumulativeReturn >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      <span className={d.cumulativeReturn >= 0 ? 'text-violet-600' : 'text-violet-400'}>
                         {d.cumulativeReturn >= 0 ? '+' : ''}{d.cumulativeReturn?.toFixed(2)}%
                       </span>
                     </div>
@@ -100,7 +100,7 @@ export function ReturnBarChart({
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.isPositive ? '#22c55e' : '#ef4444'}
+                fill={entry.isPositive ? '#7c3aed' : '#a78bfa'}
               />
             ))}
           </Bar>

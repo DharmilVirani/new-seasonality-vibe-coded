@@ -578,7 +578,25 @@ class EventAnalysisServiceV2 {
     const worstTrade = trades.reduce((worst, t) => 
       t.returnPercentage < worst.returnPercentage ? t : worst
     );
-    
+
+    // Max Drawdown calculation using equity curve
+    let equity = 100;
+    let peakEquity = 100;
+    let maxDrawdown = 0;
+    const sortedTrades = [...trades].sort((a, b) => 
+      new Date(a.eventDate) - new Date(b.eventDate)
+    );
+    for (const trade of sortedTrades) {
+      equity = equity * (1 + trade.returnPercentage / 100);
+      if (equity > peakEquity) {
+        peakEquity = equity;
+      }
+      const drawdown = (peakEquity - equity) / peakEquity * 100;
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown;
+      }
+    }
+
     return {
       totalEvents: trades.length,
       winningEvents: profitableTrades.length,
@@ -597,7 +615,8 @@ class EventAnalysisServiceV2 {
       },
       profitFactor: parseFloat(profitFactor.toFixed(2)),
       sharpeRatio: parseFloat(sharpeRatio.toFixed(2)),
-      sortinoRatio: parseFloat(sortinoRatio.toFixed(2))
+      sortinoRatio: parseFloat(sortinoRatio.toFixed(2)),
+      maxDrawdown: parseFloat(maxDrawdown.toFixed(2))
     };
   }
   
