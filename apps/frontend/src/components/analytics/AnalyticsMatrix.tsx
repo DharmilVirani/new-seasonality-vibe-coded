@@ -53,15 +53,15 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
 
     const totalProfit = useMemo(() => {
         if (!data || data.length === 0) return 0;
-        // Assuming 10k base as in design $23,005.10
         const totalReturn = data.reduce((sum, d) => sum + (d.returnPercentage || 0), 0);
-        return 10000 * (totalReturn / 100);
+        const inrRate = parseInt(process.env.NEXT_PUBLIC_INR_RATE || '83', 10);
+        return (10000 * inrRate) * (totalReturn / 100);
     }, [data]);
 
     const metrics = [
         { label: 'Annualized Return', value: `${annualizedReturn.toFixed(1)}%`, trend: annualizedReturn > 0 ? 'up' : 'down', subType: 'CAGR' },
         { label: 'Average Return', value: `${(stats?.avgReturn || 0).toFixed(2)}%`, trend: (stats?.avgReturn || 0) > 0 ? 'up' : 'down', subType: 'Per Trade' },
-        { label: 'Total Profit', value: `$${totalProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, trend: totalProfit > 0 ? 'up' : 'down', subType: 'on $10k' },
+        { label: 'Total Profit', value: `₹${totalProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, trend: totalProfit > 0 ? 'up' : 'down', subType: `on ₹${((10000 * parseInt(process.env.NEXT_PUBLIC_INR_RATE || '83', 10)) / 100000).toFixed(1)}L` },
         { label: 'Win %', value: `${(stats?.winRate || 0).toFixed(1)}%`, trend: (stats?.winRate || 0) > 50 ? 'up' : 'down', subType: `${stats?.winningEvents || 0}/${stats?.totalEvents || 0}` },
     ];
 

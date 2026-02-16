@@ -87,14 +87,17 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setDateRange: (start, end) => set({ startDate: start, endDate: end }),
   setLastNDays: (days) => set({ lastNDays: days }),
   setFilters: (filters) => set({ filters }),
-  updateFilter: (category, updates) =>
+  updateFilter: <K extends keyof FilterConfig>(
+    category: K,
+    updates: Partial<FilterConfig[K]>
+  ) =>
     set((state) => ({
       filters: {
         ...state.filters,
         [category]: {
-          ...state.filters[category],
+          ...(state.filters[category] as object || {}),
           ...updates,
-        },
+        } as FilterConfig[K],
       },
     })),
   resetFilters: () => set({ filters: defaultFilters }),

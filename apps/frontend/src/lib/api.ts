@@ -228,6 +228,7 @@ export interface MonthlyAnalysisParams {
   filters?: FilterConfig;
   chartScale?: 'linear' | 'log';
   aggregateType?: 'total' | 'average';
+  monthType?: 'calendar' | 'expiry';
 }
 
 export interface YearlyAnalysisParams {

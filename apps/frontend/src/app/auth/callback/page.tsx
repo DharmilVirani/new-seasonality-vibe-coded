@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 export default function AuthCallbackPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { setAuth } = useAuthStore();
+    const { setUser } = useAuthStore();
 
     useEffect(() => {
         const handleCallback = async () => {
@@ -38,7 +38,7 @@ export default function AuthCallbackPage() {
 
                     if (response.ok) {
                         const data = await response.json();
-                        setAuth(data.user, token, refreshToken);
+                        setUser(data.user);
 
                         toast.success('Successfully signed in with Google!');
 
@@ -63,7 +63,7 @@ export default function AuthCallbackPage() {
         };
 
         handleCallback();
-    }, [searchParams, router, setAuth]);
+    }, [searchParams, router, setUser]);
 
     return (
         <div className="min-h-screen flex items-center justify-center">

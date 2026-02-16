@@ -13,12 +13,14 @@ interface CumulativeChartWithDragSelectProps {
   data: any[];
   chartScale?: 'linear' | 'log';
   onRangeSelected?: (startDate: string, endDate: string) => void;
+  chartColor?: string;
 }
 
 export function CumulativeChartWithDragSelect({
   data,
   chartScale = 'linear',
   onRangeSelected,
+  chartColor = '#10b981',
 }: CumulativeChartWithDragSelectProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -88,12 +90,12 @@ export function CumulativeChartWithDragSelect({
         mode: 1,
         vertLine: {
           width: 1,
-          color: '#4F46E5',
+          color: chartColor,
           style: 2,
         },
         horzLine: {
           width: 1,
-          color: '#4F46E5',
+          color: chartColor,
           style: 2,
         },
       },
@@ -118,21 +120,12 @@ export function CumulativeChartWithDragSelect({
 
     chartRef.current = chart;
 
-    const areaSeries = chart.addAreaSeries({
-      lineColor: '#4F46E5',
-      topColor: 'rgba(79, 70, 229, 0.4)',
-      bottomColor: 'rgba(79, 70, 229, 0.0)',
-      lineWidth: 2,
-    });
-
-    seriesRef.current = areaSeries;
-
-    // Check if this is event data (has relativeDay) or regular date data
+    // Prepare data
     const isEventData = data.length > 0 && data[0].relativeDay !== undefined;
     
     const chartData = isEventData 
       ? data.map((d: any, index: number) => ({
-          time: index as any, // Use index as time for event data
+          time: index as any,
           value: d.cumulative || 0,
           originalDate: d.date,
           relativeDay: d.relativeDay,
@@ -143,6 +136,15 @@ export function CumulativeChartWithDragSelect({
           originalDate: d.date,
         }));
 
+    // Add area series for cumulative
+    const areaSeries = chart.addAreaSeries({
+      lineColor: chartColor,
+      topColor: `${chartColor}66`,
+      bottomColor: `${chartColor}00`,
+      lineWidth: 2,
+    });
+
+    seriesRef.current = areaSeries;
     areaSeries.setData(chartData);
     chart.timeScale().fitContent();
 
@@ -169,11 +171,16 @@ export function CumulativeChartWithDragSelect({
         return;
       }
 
-      const dataPoint = param.seriesData.get(areaSeries);
-      if (dataPoint) {
-        // For event data, show relative day label; for regular data, show date
+      const seriesData = param.seriesData;
+      const firstSeries = seriesData.keys().next().value;
+      
+      if (firstSeries) {
+        const dataPoint = seriesData.get(firstSeries);
+        const cumulativeValue = dataPoint?.value ?? 0;
+        
+        const chartDataPoint = chartData[param.time];
         const dateStr = isEventData
-          ? chartData[param.time]?.originalDate || `Day ${param.time}`
+          ? chartDataPoint?.originalDate || `Day ${param.time}`
           : new Date(param.time * 1000).toLocaleDateString('en-IN', {
               day: '2-digit',
               month: 'short',
@@ -185,7 +192,7 @@ export function CumulativeChartWithDragSelect({
           x: param.point.x,
           y: param.point.y,
           date: dateStr,
-          value: dataPoint.value,
+          value: cumulativeValue,
         });
       }
     });
@@ -296,7 +303,7 @@ export function CumulativeChartWithDragSelect({
       {/* Instruction hint */}
       {!selection.isActive && !timeRangeSelection.isActive && (
         <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg shadow-sm px-3 py-1.5 text-xs text-slate-600 flex items-center gap-2">
-          <MousePointerClick className="h-3.5 w-3.5 text-indigo-600" />
+          <MousePointerClick className="h-3.5 w-3.5" style={{ color: chartColor }} />
           <span>Click and drag to select time range</span>
         </div>
       )}
@@ -326,8 +333,8 @@ export function CumulativeChartWithDragSelect({
             }}
           >
             <div className="font-semibold text-slate-700 mb-1">{tooltip.date}</div>
-            <div className="text-indigo-600 font-bold">
-              Cumulative: {tooltip.value.toFixed(2)}
+            <div className={`font-bold`} style={{ color: chartColor }}>
+              Cumulative: {tooltip.value.toFixed(2)}%
             </div>
           </div>
         )}

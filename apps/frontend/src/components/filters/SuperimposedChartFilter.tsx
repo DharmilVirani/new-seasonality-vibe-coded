@@ -15,7 +15,7 @@ export function SuperimposedChartFilter() {
   const handleChartTypeChange = (value: string) => {
     setFilters({
       ...filters,
-      superimposedChartType: value,
+      superimposedChartType: value as 'CalendarYearDays' | 'TradingYearDays' | 'CalendarMonthDays' | 'TradingMonthDays' | 'Weekdays',
     });
   };
 

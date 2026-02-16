@@ -31,11 +31,15 @@ app.use(helmet({
 }));
 
 // CORS configuration
-// CORS configuration - ALLOW ALL ORIGINS
-console.log('CORS: Allowing ALL origins');
+// CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ['http://localhost:3000', 'http://localhost:3001'];
+
+console.log('CORS allowed origins:', allowedOrigins);
 
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: allowedOrigins,
   credentials: true, // Allow cookies/credentials
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
@@ -102,11 +106,7 @@ app.use(errorHandler);
 
 const startServer = async () => {
   try {
-    // Test database connection
-    await prisma.$connect();
-    logger.info('Database connected');
-
-    // Start server
+    // Start server FIRST (non-blocking)
     const server = app.listen(config.port, () => {
       logger.info(`Server started`, {
         port: config.port,
@@ -125,6 +125,11 @@ const startServer = async () => {
 ╚═══════════════════════════════════════════════════════════╝
       `);
     });
+
+    // Connect to database in BACKGROUND (non-blocking)
+    prisma.$connect()
+      .then(() => logger.info('Database connected'))
+      .catch((err) => logger.error('Database connection failed', { error: err.message }));
 
     // Graceful shutdown
     const shutdown = async (signal) => {

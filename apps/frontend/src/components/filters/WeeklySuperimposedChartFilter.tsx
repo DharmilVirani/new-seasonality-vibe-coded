@@ -15,7 +15,7 @@ export function WeeklySuperimposedChartFilter() {
   const handleChartTypeChange = (value: string) => {
     setFilters({
       ...filters,
-      weeklySuperimposedChartType: value,
+      weeklySuperimposedChartType: value as 'YearlyWeeks' | 'MonthlyWeeks',
     });
   };
 

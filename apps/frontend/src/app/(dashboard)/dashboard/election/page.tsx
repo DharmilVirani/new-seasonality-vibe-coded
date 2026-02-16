@@ -27,6 +27,7 @@ export default function ElectionPage() {
     queryKey: ['election-analysis', selectedSymbols, startDate, endDate, filters],
     queryFn: async () => {
       const response = await analysisApi.election({
+        symbol: selectedSymbols[0],
         symbols: selectedSymbols,
         startDate,
         endDate,

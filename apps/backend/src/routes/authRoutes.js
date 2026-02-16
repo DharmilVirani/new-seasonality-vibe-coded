@@ -7,6 +7,7 @@ const router = express.Router();
 const AuthService = require('../services/AuthService');
 const { authenticateToken } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
+const { strictRateLimiter } = require('../middleware/rateLimit');
 const { z } = require('zod');
 const { logger } = require('../utils/logger');
 const passport = require('../config/passport');
@@ -66,7 +67,7 @@ router.get('/test', async (req, res) => {
  * POST /auth/register
  * Register a new user
  */
-router.post('/register', validate(registerSchema), async (req, res, next) => {
+router.post('/register', strictRateLimiter, validate(registerSchema), async (req, res, next) => {
   try {
     console.log('Registration request received:', {
       body: { ...req.body, password: '***' },
@@ -92,7 +93,7 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
  * POST /auth/login
  * Login user
  */
-router.post('/login', validate(loginSchema), async (req, res, next) => {
+router.post('/login', strictRateLimiter, validate(loginSchema), async (req, res, next) => {
   try {
     console.log('Login request received:', {
       body: { ...req.body, password: '***' },
@@ -147,7 +148,7 @@ router.post('/refresh', async (req, res, next) => {
  * POST /auth/forgot-password
  * Request password reset
  */
-router.post('/forgot-password', async (req, res, next) => {
+router.post('/forgot-password', strictRateLimiter, async (req, res, next) => {
   try {
     const { email } = req.body;
 
@@ -172,7 +173,7 @@ router.post('/forgot-password', async (req, res, next) => {
  * POST /auth/reset-password
  * Reset password with token
  */
-router.post('/reset-password', async (req, res, next) => {
+router.post('/reset-password', strictRateLimiter, async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
 

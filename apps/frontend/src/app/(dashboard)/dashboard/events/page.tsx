@@ -344,6 +344,69 @@ export default function EventsPage() {
               </div>
             </div>
           </FilterSection>
+
+          <FilterSection title="Event Window" defaultOpen>
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Days Before Event</label>
+                <input
+                  type="number"
+                  value={windowBefore}
+                  onChange={(e) => setWindowBefore(Number(e.target.value))}
+                  min={0}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Days After Event</label>
+                <input
+                  type="number"
+                  value={windowAfter}
+                  onChange={(e) => setWindowAfter(Number(e.target.value))}
+                  min={0}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Entry Point</label>
+                <Select value={entryPoint} onValueChange={(val: 'T-1_CLOSE' | 'T0_OPEN' | 'T0_CLOSE') => setEntryPoint(val)}>
+                  <SelectTrigger className="w-full h-9 text-xs">
+                    <SelectValue placeholder="Select entry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="T-1_CLOSE">T-1 Close</SelectItem>
+                    <SelectItem value="T0_OPEN">T0 Open</SelectItem>
+                    <SelectItem value="T0_CLOSE">T0 Close</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Exit Point</label>
+                <Select value={exitPoint} onValueChange={setExitPoint}>
+                  <SelectTrigger className="w-full h-9 text-xs">
+                    <SelectValue placeholder="Select exit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="T+1_CLOSE">T+1 Close</SelectItem>
+                    <SelectItem value="T+2_CLOSE">T+2 Close</SelectItem>
+                    <SelectItem value="T+3_CLOSE">T+3 Close</SelectItem>
+                    <SelectItem value="T+5_CLOSE">T+5 Close</SelectItem>
+                    <SelectItem value="T+10_CLOSE">T+10 Close</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Min Occurrences</label>
+                <input
+                  type="number"
+                  value={minOccurrences}
+                  onChange={(e) => setMinOccurrences(Number(e.target.value))}
+                  min={1}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                />
+              </div>
+            </div>
+          </FilterSection>
         </div>
 
         <div className="flex-shrink-0 p-4 border-t border-slate-100 bg-white">
@@ -476,6 +539,7 @@ export default function EventsPage() {
                   <CumulativeChartWithDragSelect
                     data={mainChartData}
                     chartScale={chartScale}
+                    chartColor="#8b5cf6"
                   />
                 )}
               </div>
@@ -504,6 +568,7 @@ export default function EventsPage() {
                   <CumulativeChartWithDragSelect
                     data={cumulativeProfitData}
                     chartScale="linear"
+                    chartColor="#8b5cf6"
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>

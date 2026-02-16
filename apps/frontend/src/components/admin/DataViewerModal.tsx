@@ -20,7 +20,7 @@ import {
   FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '../lib/utils';
+import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
 // Helper function to format date as dd/mm/yyyy

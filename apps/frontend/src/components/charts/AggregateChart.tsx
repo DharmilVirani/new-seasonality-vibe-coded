@@ -51,12 +51,19 @@ export function AggregateChart({
   fieldType,
   config = {},
 }: AggregateChartProps) {
+  console.log('AggregateChart data:', data, 'aggregateType:', aggregateType);
+  
   const chartData = useMemo(() => {
-    return data.map((d) => ({
-      ...d,
-      value: d[aggregateType],
-      isPositive: d[aggregateType] >= 0,
-    }));
+    if (!data || data.length === 0) return [];
+    return (data as any[]).map((d) => {
+      const value = d.value !== undefined ? d.value : (d[aggregateType] || 0);
+      return {
+        ...d,
+        field: d.weekday || d.field || d.month || d.day || '',
+        value: value,
+        isPositive: value >= 0,
+      };
+    });
   }, [data, aggregateType]);
 
   const chartConfig: ChartConfig = {
@@ -65,8 +72,16 @@ export function AggregateChart({
     ...config,
   };
 
+  if (!chartData || chartData.length === 0) {
+    return (
+      <div className="h-full w-full flex items-center justify-center text-slate-400 text-sm">
+        No aggregate data available
+      </div>
+    );
+  }
+
   return (
-    <ChartWrapper config={chartConfig}>
+    <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -87,22 +102,14 @@ export function AggregateChart({
               const d = payload[0].payload;
               return (
                 <div className="bg-card border rounded-lg p-3 shadow-lg">
-                  <p className="font-medium">{fieldLabels[fieldType]}: {d.field}</p>
+                  <p className="font-medium">{d.field}</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
-                    <span className="text-muted-foreground">Total:</span>
-                    <span className={cn(d.total >= 0 ? 'text-green-600' : 'text-red-600')}>
-                      {d.total?.toFixed(2)}%
-                    </span>
-                    <span className="text-muted-foreground">Average:</span>
-                    <span className={cn(d.avg >= 0 ? 'text-green-600' : 'text-red-600')}>
-                      {d.avg?.toFixed(2)}%
+                    <span className="text-muted-foreground">Value:</span>
+                    <span className={cn(d.value >= 0 ? 'text-green-600' : 'text-red-600')}>
+                      {d.value?.toFixed(2)}%
                     </span>
                     <span className="text-muted-foreground">Count:</span>
                     <span>{d.count}</span>
-                    <span className="text-muted-foreground">Positive:</span>
-                    <span className="text-green-600">{d.posCount} ({d.posAccuracy?.toFixed(1)}%)</span>
-                    <span className="text-muted-foreground">Negative:</span>
-                    <span className="text-red-600">{d.negCount} ({d.negAccuracy?.toFixed(1)}%)</span>
                   </div>
                 </div>
               );
@@ -118,12 +125,12 @@ export function AggregateChart({
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.isPositive ? '#22c55e' : '#ef4444'}
+                fill={entry.isPositive ? '#10b981' : '#ef4444'}
               />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </ChartWrapper>
+    </div>
   );
 }
