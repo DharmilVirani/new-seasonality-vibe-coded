@@ -25,6 +25,8 @@ import {
   YearFilters,
   OutlierFilters
 } from '@/components/filters';
+import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
@@ -32,43 +34,15 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   </div>
 );
 
+const PRIMARY_COLOR = '#f97316';
+
 export default function YearlyPage() {
   const { selectedSymbols, startDate, endDate, filters, chartScale } = useAnalysisStore();
   const { timeRangeSelection, clearTimeRangeSelection } = useChartSelectionStore();
   const [yearType, setYearType] = useState<'calendar' | 'expiry'>('calendar');
   const [activeTab, setActiveTab] = useState('chart');
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterWidth, setFilterWidth] = useState(280);
-  const [isResizing, setIsResizing] = useState(false);
   const chartRef = React.useRef<HTMLDivElement>(null);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX - 64;
-    if (newWidth >= 200 && newWidth <= 500) {
-      setFilterWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['yearly-analysis', selectedSymbols, startDate, endDate, filters, yearType, timeRangeSelection.startDate, timeRangeSelection.endDate],
@@ -151,117 +125,12 @@ export default function YearlyPage() {
   };
 
   return (
-    <div className="flex h-full bg-slate-50" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
-      {/* LEFT SIDEBAR - FILTER CONSOLE */}
-      <aside 
-        style={{ 
-          width: filterOpen ? filterWidth : 0,
-          transition: isResizing ? 'none' : 'width 0.3s ease-out'
-        }}
-        className="bg-white border-r border-slate-200 flex flex-col overflow-hidden relative"
-      >
-        <div className="flex-shrink-0 h-14 border-b border-slate-100 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-amber-600" />
-            <h2 className="font-bold text-sm text-slate-700 uppercase tracking-wider">Filter Console</h2>
-          </div>
-          <button 
-            onClick={() => setFilterOpen(false)}
-            className="p-1 hover:bg-slate-100 rounded"
-          >
-            <ChevronLeft className="h-4 w-4 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Market Context */}
-          <FilterSection title="Market Context" defaultOpen>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
-                <SymbolSelector />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Year Type</label>
-                <Select value={yearType} onValueChange={(v) => setYearType(v as 'calendar' | 'expiry')}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white shadow-lg">
-                    <SelectItem value="calendar">Calendar Year</SelectItem>
-                    <SelectItem value="expiry">Expiry Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </FilterSection>
-
-          {/* Time Ranges */}
-          <FilterSection title="Time Ranges" defaultOpen>
-            <div className="space-y-3">
-              <DateRangePicker />
-            </div>
-          </FilterSection>
-
-          {/* Temporal Filters */}
-          <FilterSection title="Year Filters">
-            <YearFilters />
-          </FilterSection>
-
-          {/* Risk Management */}
-          <FilterSection title="Risk Management">
-            <OutlierFilters />
-          </FilterSection>
-        </div>
-
-        {/* Apply Filters Button */}
-        <div className="flex-shrink-0 p-3 border-t border-slate-100">
-          <Button 
-            onClick={() => refetch()} 
-            disabled={isFetching || selectedSymbols.length === 0}
-            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-lg"
-          >
-            {isFetching ? (
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Computing...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Play className="h-4 w-4 fill-current" />
-                APPLY FILTERS
-              </div>
-            )}
-          </Button>
-        </div>
-
-        {/* RESIZE HANDLE */}
-        {filterOpen && (
-          <div
-            onMouseDown={handleMouseDown}
-            className={cn(
-              "absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-amber-400 transition-colors group",
-              isResizing && "bg-amber-500"
-            )}
-          >
-            <div className="absolute right-0 top-0 bottom-0 w-4 -mr-2" />
-          </div>
-        )}
-      </aside>
-
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+    <div className="flex h-full bg-slate-50">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* TOP HEADER */}
         <header className="flex-shrink-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            {!filterOpen && (
-              <button 
-                onClick={() => setFilterOpen(true)}
-                className="p-2 hover:bg-slate-100 rounded"
-              >
-                <ChevronRight className="h-5 w-5 text-slate-400" />
-              </button>
-            )}
             <div className="flex items-center gap-3">
               <TrendingUp className="h-6 w-6 text-amber-600" />
               <div>
@@ -337,18 +206,21 @@ export default function YearlyPage() {
                 value={`${(stats.cagr || 0).toFixed(2)}%`}
                 subtitle={`Avg: ${(stats.avgReturnAll || 0).toFixed(2)}%`}
                 trend={(stats.cagr || 0) >= 0 ? 'up' : 'down'}
+                metricKey="cagr"
               />
               <StatCard
                 label="WIN RATE"
                 value={`${(stats.winRate || 0).toFixed(1)}%`}
                 subtitle="Hist. Avg"
                 trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
+                metricKey="winRate"
               />
               <StatCard
                 label="MAX DRAWDOWN"
                 value={`${(stats.maxDrawdown || 0).toFixed(2)}%`}
                 subtitle={`Max Gain: ${(stats.maxGain || 0).toFixed(2)}%`}
                 trend="down"
+                metricKey="maxDrawdown"
               />
               <StatCard
                 label="SHARPE RATIO"
@@ -359,6 +231,7 @@ export default function YearlyPage() {
                   stats.sharpeRatio > 0 ? 'Fair' : 'Poor'
                 }
                 trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
+                metricKey="sharpeRatio"
               />
             </div>
           </div>
@@ -459,22 +332,70 @@ export default function YearlyPage() {
           </div>
         </div>
       </div>
+
+      {/* Right Filter Console */}
+      <RightFilterConsole
+        isOpen={filterOpen}
+        onToggle={() => setFilterOpen(!filterOpen)}
+        onApply={() => refetch()}
+        isLoading={isFetching}
+        title="Filters"
+        subtitle="Configure Analysis"
+        primaryColor={PRIMARY_COLOR}
+      >
+        <FilterSection title="Market Context" defaultOpen delay={0}>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
+              <SymbolSelector />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Year Type</label>
+              <Select value={yearType} onValueChange={(v) => setYearType(v as 'calendar' | 'expiry')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white shadow-lg">
+                  <SelectItem value="calendar">Calendar Year</SelectItem>
+                  <SelectItem value="expiry">Expiry Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Time Ranges" defaultOpen delay={0.05}>
+          <div className="space-y-3">
+            <DateRangePicker />
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Year Filters" delay={0.1}>
+          <YearFilters />
+        </FilterSection>
+
+        <FilterSection title="Risk Management" delay={0.15}>
+          <OutlierFilters />
+        </FilterSection>
+      </RightFilterConsole>
     </div>
   );
 }
 
 // Stat Card Component
-function StatCard({ label, value, subtitle, change, trend }: {
+function StatCard({ label, value, subtitle, change, trend, metricKey }: {
   label: string;
   value: string;
   subtitle?: string;
   change?: string;
   trend?: 'up' | 'down';
+  metricKey?: string;
 }) {
   return (
     <div className="bg-slate-50 rounded-lg p-3">
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 flex items-center">
         {label}
+        {metricKey && <MetricTooltip metric={metricKey} />}
       </div>
       <div className="flex items-baseline gap-2">
         <div className="text-xl font-bold text-slate-900">{value}</div>
@@ -491,44 +412,6 @@ function StatCard({ label, value, subtitle, change, trend }: {
       {subtitle && (
         <div className="text-xs text-slate-500 mt-1">{subtitle}</div>
       )}
-    </div>
-  );
-}
-
-// Filter Section Component
-function FilterSection({ title, children, defaultOpen = false }: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors"
-      >
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{title}</span>
-        <ChevronDown className={cn(
-          "h-4 w-4 text-slate-400 transition-transform",
-          isOpen && "rotate-180"
-        )} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="p-3 bg-white">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

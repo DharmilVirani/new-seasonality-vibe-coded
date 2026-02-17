@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn, formatDate, formatPercentage } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { MetricTooltip } from '@/components/ui/MetricTooltip';
 
 interface DataTableProps {
   data: Array<{
@@ -23,7 +24,6 @@ interface DataTableProps {
 export function DataTable({ data, title = 'Data Table', pageSize = 20 }: DataTableProps) {
   const [page, setPage] = useState(0);
   
-  // If data is undefined (loading state), show loading
   if (!data) {
     return (
       <Card>
@@ -39,7 +39,6 @@ export function DataTable({ data, title = 'Data Table', pageSize = 20 }: DataTab
     );
   }
   
-  // If data is not an array or empty array, show no data message
   if (!Array.isArray(data) || data.length === 0) {
     return (
       <Card>
@@ -88,24 +87,35 @@ export function DataTable({ data, title = 'Data Table', pageSize = 20 }: DataTab
           <table className="data-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Open</th>
-                <th>High</th>
-                <th>Low</th>
-                <th>Close</th>
-                <th>Return %</th>
+                <th className="text-left">
+                  <span className="inline-flex items-center">
+                    Date
+                    <MetricTooltip metric="year" />
+                  </span>
+                </th>
+                <th className="text-right">Open</th>
+                <th className="text-right">High</th>
+                <th className="text-right">Low</th>
+                <th className="text-right">Close</th>
+                <th className="text-right">
+                  <span className="inline-flex items-center">
+                    Return %
+                    <MetricTooltip metric="returnPercentage" />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {paginatedData.map((row, idx) => (
                 <tr key={idx}>
                   <td>{formatDate(row.date)}</td>
-                  <td>{row.open.toFixed(2)}</td>
-                  <td>{row.high.toFixed(2)}</td>
-                  <td>{row.low.toFixed(2)}</td>
-                  <td>{row.close.toFixed(2)}</td>
+                  <td className="text-right">{row.open.toFixed(2)}</td>
+                  <td className="text-right">{row.high.toFixed(2)}</td>
+                  <td className="text-right">{row.low.toFixed(2)}</td>
+                  <td className="text-right">{row.close.toFixed(2)}</td>
                   <td
                     className={cn(
+                      "text-right",
                       row.returnPercentage && row.returnPercentage > 0
                         ? 'text-green-600'
                         : row.returnPercentage && row.returnPercentage < 0

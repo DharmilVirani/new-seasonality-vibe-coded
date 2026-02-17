@@ -32,6 +32,8 @@ import {
   OutlierFilters,
   SuperimposedChartFilter
 } from '@/components/filters';
+import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
@@ -91,35 +93,7 @@ function InfoTooltip({ content }: { content: string }) {
   );
 }
 
-function FilterSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors"
-      >
-        <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">{title}</span>
-        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="p-3 border-t border-slate-100">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+const PRIMARY_COLOR = '#10b981';
 
 function PlaceholderState() {
   return (
@@ -135,11 +109,9 @@ export default function DailyPage() {
   const { selectedSymbols, startDate, endDate, lastNDays, filters, chartScale } = useAnalysisStore();
   const { timeRangeSelection } = useChartSelectionStore();
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterWidth, setFilterWidth] = useState(280);
-  const [isResizing, setIsResizing] = useState(false);
 
   // Chart mode selection
-  const [activeChart, setActiveChart] = useState<'superimposed' | 'yearly' | 'aggregate'>('superimposed');
+  const [activeChart, setActiveChart] = useState<'cumulative' | 'yearly' | 'aggregate'>('cumulative');
   
   // Aggregate chart settings
   const [aggregateField, setAggregateField] = useState<'weekday' | 'CalendarYearDay' | 'TradingYearDay' | 'CalendarMonthDay' | 'TradingMonthDay' | 'Month'>('weekday');
@@ -147,34 +119,6 @@ export default function DailyPage() {
   
   // Data table toggle
   const [activeTable, setActiveTable] = useState<'daily' | 'monthly' | 'yearly' | 'statistics'>('daily');
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX;
-    if (newWidth >= 200 && newWidth <= 400) {
-      setFilterWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   // Fetch daily analysis data
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -241,111 +185,12 @@ export default function DailyPage() {
   const symbol = selectedSymbols[0] || 'NIFTY';
 
   return (
-    <div className="flex h-full bg-[#F8F9FB]" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
-      {/* LEFT SIDEBAR - FILTER CONSOLE */}
-      <aside 
-        style={{ 
-          width: filterOpen ? filterWidth : 0,
-          transition: isResizing ? 'none' : 'width 0.3s ease-out'
-        }}
-        className="bg-white border-r border-slate-200 flex flex-col overflow-hidden relative flex-shrink-0 z-20"
-      >
-        <div 
-          className="flex-shrink-0 h-14 border-b border-slate-100 flex items-center justify-between px-4 bg-white"
-        >
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-slate-500" />
-            <h2 className="font-semibold text-xs text-slate-600 uppercase tracking-wide">Filters</h2>
-          </div>
-          <button
-            onClick={() => setFilterOpen(false)}
-            className="p-1 hover:bg-slate-50 rounded transition-colors"
-          >
-            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <FilterSection title="Symbol" defaultOpen>
-            <div className="pt-1">
-              <SymbolSelector />
-            </div>
-          </FilterSection>
-
-          <FilterSection title="Time Range" defaultOpen>
-            <div className="space-y-3 pt-1">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => useAnalysisStore.getState().setDateRange(e.target.value, useAnalysisStore.getState().endDate)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">End Date</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => useAnalysisStore.getState().setDateRange(useAnalysisStore.getState().startDate, e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between mb-1.5">
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Last N Days</label>
-                  <span className="text-[10px] font-bold text-slate-400">{lastNDays}</span>
-                </div>
-                <input
-                  type="number"
-                  value={lastNDays}
-                  onChange={(e) => useAnalysisStore.getState().setLastNDays(parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-                />
-              </div>
-            </div>
-          </FilterSection>
-
-          <FilterSection title="Year Filters">
-            <YearFilters />
-          </FilterSection>
-
-          <FilterSection title="Month Filters">
-            <MonthFilters />
-          </FilterSection>
-
-          <FilterSection title="Week Filters">
-            <WeekFilters />
-          </FilterSection>
-
-          <FilterSection title="Day Filters">
-            <DayFilters />
-          </FilterSection>
-
-          <FilterSection title="Outlier Filters">
-            <OutlierFilters />
-          </FilterSection>
-
-          <FilterSection title="Chart Type">
-            <SuperimposedChartFilter />
-          </FilterSection>
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div className="flex h-full bg-[#F8F9FB]">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* HEADER */}
         <header className="flex-shrink-0 h-14 border-b border-slate-200 bg-white flex items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            {!filterOpen && (
-              <button
-                onClick={() => setFilterOpen(true)}
-                className="p-1.5 hover:bg-slate-50 rounded transition-colors mr-2"
-              >
-                <ChevronRight className="h-4 w-4 text-slate-400 rotate-180" />
-              </button>
-            )}
             <Zap className="h-5 w-5 text-emerald-600 fill-emerald-200" />
             <div>
               <h1 className="text-base font-bold text-slate-900 leading-none">
@@ -383,35 +228,35 @@ export default function DailyPage() {
                 value={stats.totalCount?.toString() || '0'}
                 trend="neutral"
                 subValue={`${stats.positiveCount || 0} positive`}
-                tooltip="Total number of trading days in the selected dataset after applying filters."
+                metricKey="totalCount"
               />
               <StatCard
                 label="WIN RATE"
                 value={`${(stats.winRate || 0).toFixed(1)}%`}
                 trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
                 subValue={`${stats.positiveCount || 0} wins`}
-                tooltip="Percentage of trading days with positive returns. Above 50% indicates a bullish bias."
+                metricKey="winRate"
               />
               <StatCard
                 label="AVG RETURN"
                 value={`${(stats.avgReturnAll || 0).toFixed(2)}%`}
                 trend={(stats.avgReturnAll || 0) >= 0 ? 'up' : 'down'}
                 subValue={`Median: ${((stats.sumReturnAll || 0) / (stats.totalCount || 1)).toFixed(2)}%`}
-                tooltip="Average daily return percentage across all trading days in the dataset."
+                metricKey="avgReturn"
               />
               <StatCard
                 label="CAGR"
                 value={`${(stats.cagr || 0).toFixed(2)}%`}
                 trend={(stats.cagr || 0) > 0 ? 'up' : 'down'}
                 subValue={`Sharpe: ${(stats.sharpeRatio || 0).toFixed(2)}`}
-                tooltip="Compound Annual Growth Rate - the smoothed annual return over the analysis period."
+                metricKey="cagr"
               />
               <StatCard
                 label="MAX DD"
                 value={`${Math.abs(stats.maxDrawdown || 0).toFixed(2)}%`}
                 trend={(stats.maxDrawdown || 0) > -10 ? 'up' : 'down'}
                 subValue={`StdDev: ${(stats.stdDev || 0).toFixed(2)}`}
-                tooltip="Maximum drawdown - the largest peak-to-trough decline during the analysis period."
+                metricKey="maxDrawdown"
               />
             </div>
           )}
@@ -419,7 +264,7 @@ export default function DailyPage() {
           {/* CHART MODE SELECTOR */}
           <div className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 p-1 w-fit">
             {[
-              { id: 'superimposed', label: 'Superimposed' },
+              { id: 'cumulative', label: 'Cumulative' },
               { id: 'yearly', label: 'Yearly' },
               { id: 'aggregate', label: 'Aggregate' },
             ].map((mode) => (
@@ -480,7 +325,7 @@ export default function DailyPage() {
               <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
                 <div className="flex items-center">
                   <h3 className="font-semibold text-slate-800 text-sm">
-                    {activeChart === 'superimposed' && 'Superimposed Pattern'}
+                    {activeChart === 'cumulative' && 'Cumulative Returns'}
                     {activeChart === 'yearly' && 'Yearly Overlay'}
                     {activeChart === 'aggregate' && `${aggregateType === 'avg' ? 'Average' : aggregateType} Returns by ${aggregateField}`}
                   </h3>
@@ -490,10 +335,11 @@ export default function DailyPage() {
               <div className="flex-1 w-full relative p-4">
                 {!data ? (
                   <PlaceholderState />
-                ) : activeChart === 'superimposed' ? (
-                  <SuperimposedChart
-                    data={symbolData?.chartData || []}
-                    symbol={symbol}
+                ) : activeChart === 'cumulative' ? (
+                  <CumulativeChartWithDragSelect
+                    data={cumulativeData}
+                    chartScale={chartScale}
+                    chartColor="#10b981"
                   />
                 ) : activeChart === 'yearly' ? (
                   <YearlyOverlayChart
@@ -527,22 +373,21 @@ export default function DailyPage() {
             </div>
           </div>
 
-          {/* SECONDARY PANELS - Cumulative Profit & Pattern Returns */}
+          {/* SECONDARY PANELS - Superimposed & Pattern Returns */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 h-[300px]">
-            {/* Cumulative Profit */}
+            {/* Superimposed Chart */}
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-100">
                 <div className="flex items-center">
-                  <h3 className="font-semibold text-slate-800 text-sm">Cumulative Returns</h3>
-                  <InfoTooltip content="Shows the cumulative return over time if you had invested at the start of the period." />
+                  <h3 className="font-semibold text-slate-800 text-sm">Superimposed Pattern</h3>
+                  <InfoTooltip content="Shows average pattern across all years overlaid as a single compounded line." />
                 </div>
               </div>
               <div className="flex-1 w-full p-4 relative">
-                {cumulativeData.length > 0 ? (
-                  <CumulativeChartWithDragSelect
-                    data={cumulativeData}
-                    chartScale="linear"
-                    chartColor="#10b981"
+                {data ? (
+                  <SuperimposedChart
+                    data={symbolData?.chartData || []}
+                    symbol={symbol}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
@@ -564,6 +409,7 @@ export default function DailyPage() {
                     data={patternReturnsData}
                     symbol={symbol}
                     config={{ title: '', height: 240 }}
+                    color="#10b981"
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
@@ -625,6 +471,82 @@ export default function DailyPage() {
 
         </div>
       </div>
+
+      {/* Right Filter Console */}
+      <RightFilterConsole
+        isOpen={filterOpen}
+        onToggle={() => setFilterOpen(!filterOpen)}
+        onApply={() => refetch()}
+        isLoading={isFetching}
+        title="Filters"
+        subtitle="Configure Analysis"
+        primaryColor={PRIMARY_COLOR}
+      >
+        <FilterSection title="Symbol" defaultOpen delay={0}>
+          <div className="pt-1">
+            <SymbolSelector />
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Time Range" defaultOpen delay={0.05}>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => useAnalysisStore.getState().setDateRange(e.target.value, useAnalysisStore.getState().endDate)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => useAnalysisStore.getState().setDateRange(useAnalysisStore.getState().startDate, e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+              />
+            </div>
+            <div>
+              <div className="flex justify-between mb-1.5">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Last N Days</label>
+                <span className="text-[10px] font-bold text-slate-400">{lastNDays}</span>
+              </div>
+              <input
+                type="number"
+                value={lastNDays}
+                onChange={(e) => useAnalysisStore.getState().setLastNDays(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+              />
+            </div>
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Year Filters" delay={0.1}>
+          <YearFilters />
+        </FilterSection>
+
+        <FilterSection title="Month Filters" delay={0.15}>
+          <MonthFilters />
+        </FilterSection>
+
+        <FilterSection title="Week Filters" delay={0.1}>
+          <WeekFilters />
+        </FilterSection>
+
+        <FilterSection title="Day Filters" delay={0.15}>
+          <DayFilters />
+        </FilterSection>
+
+        <FilterSection title="Outlier Filters" delay={0.1}>
+          <OutlierFilters />
+        </FilterSection>
+
+        <FilterSection title="Chart Type" delay={0.15}>
+          <SuperimposedChartFilter />
+        </FilterSection>
+      </RightFilterConsole>
     </div>
   );
 }
@@ -633,18 +555,18 @@ export default function DailyPage() {
 // SUB-COMPONENTS
 // =====================================================
 
-function StatCard({ label, value, subValue, trend, tooltip }: {
+function StatCard({ label, value, subValue, trend, metricKey }: {
   label: string;
   value: string;
   subValue?: string;
   trend?: 'up' | 'down' | 'neutral';
-  tooltip?: string;
+  metricKey?: string;
 }) {
   return (
     <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
       <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center">
         {label}
-        {tooltip && <InfoTooltip content={tooltip} />}
+        {metricKey && <MetricTooltip metric={metricKey} />}
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
@@ -1146,11 +1068,10 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
   }, [data, superimposedChartType, electionChartTypes]);
 
   return (
-    <div className="h-full w-full relative">
+    <div ref={chartContainerRef} className="h-full w-full relative">
       <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700">
         {symbol} - {superimposedChartType.replace(/([A-Z])/g, ' $1').trim()} - {yearRange ? `${yearRange.yearCount} Years (${yearRange.minYear}-${yearRange.maxYear})` : 'All Years'}
       </div>
-      <div ref={chartContainerRef} className="h-full w-full" />
       {tooltip && tooltip.visible && (
         <div className="absolute pointer-events-none bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs z-50" style={{ left: `${tooltip.x + 10}px`, top: `${tooltip.y - 60}px` }}>
           <div className="font-semibold text-slate-700 mb-1">

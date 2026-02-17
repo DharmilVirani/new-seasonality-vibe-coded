@@ -398,12 +398,12 @@ class DerivedFieldsCalculator {
             dryRun = false
         } = options;
 
-        console.log('\n🧮 Starting Derived Fields Calculation');
+        console.log('\n Starting Derived Fields Calculation');
         console.log('======================================');
-        console.log(`📊 Symbols: ${symbols ? symbols.join(', ') : 'All'}`);
-        console.log(`⏱️  Timeframes: ${timeframes.join(', ')}`);
-        console.log(`📦 Batch Size: ${batchSize}`);
-        console.log(`🔍 Dry Run: ${dryRun ? 'Yes' : 'No'}`);
+        console.log(`Symbols: ${symbols ? symbols.join(', ') : 'All'}`);
+        console.log(`Timeframes: ${timeframes.join(', ')}`);
+        console.log(`Batch Size: ${batchSize}`);
+        console.log(`Dry Run: ${dryRun ? 'Yes' : 'No'}`);
 
         if (timeframes.includes('daily')) {
             await this.calculateDailyDerivedFields(symbols, batchSize, dryRun);

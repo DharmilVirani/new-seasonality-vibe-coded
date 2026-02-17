@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ChevronLeft, ChevronRight, Download, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn, formatDate, formatPercentage, formatNumber } from '@/lib/utils';
 import type { DataTableColumn } from './types';
+import { TableHeaderTooltip } from '@/components/ui/MetricTooltip';
 
 interface AdvancedDataTableProps<T extends Record<string, unknown>> {
   data: T[];
@@ -168,7 +169,10 @@ export function AdvancedDataTable<T extends Record<string, unknown>>({
                     onClick={() => col.sortable !== false && handleSort(col.key)}
                   >
                     <div className="flex items-center gap-1 justify-between">
-                      <span>{col.label}</span>
+                      <span className="flex items-center gap-1">
+                        {col.label}
+                        {col.tooltipKey && <TableHeaderTooltip metricKey={col.tooltipKey} />}
+                      </span>
                       {col.sortable !== false && getSortIcon(col.key)}
                     </div>
                   </th>

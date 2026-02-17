@@ -21,6 +21,7 @@ interface ReturnBarChartProps {
   symbol: string;
   config?: ChartConfig;
   showCumulative?: boolean;
+  color?: string;
 }
 
 export function ReturnBarChart({
@@ -28,7 +29,12 @@ export function ReturnBarChart({
   symbol,
   config = {},
   showCumulative = false,
+  color = '#7c3aed',
 }: ReturnBarChartProps) {
+  // Generate lighter shade for negative bars
+  const lighterColor = color.length === 7 
+    ? color + '99' // Add alpha for lighter version
+    : color;
   const chartData = useMemo(() => {
     let cumulative = 0;
     return data.map((d) => {
@@ -74,14 +80,14 @@ export function ReturnBarChart({
                   <p className="font-medium">{d.date}</p>
                   <div className="text-sm mt-1">
                     <span className="text-muted-foreground">Return: </span>
-                    <span className={d.isPositive ? 'text-violet-600' : 'text-violet-400'}>
+                    <span style={{ color: d.isPositive ? color : lighterColor }}>
                       {d.returnPercentage >= 0 ? '+' : ''}{d.returnPercentage?.toFixed(2)}%
                     </span>
                   </div>
                   {showCumulative && (
                     <div className="text-sm">
                       <span className="text-muted-foreground">Cumulative: </span>
-                      <span className={d.cumulativeReturn >= 0 ? 'text-violet-600' : 'text-violet-400'}>
+                      <span style={{ color: d.cumulativeReturn >= 0 ? color : lighterColor }}>
                         {d.cumulativeReturn >= 0 ? '+' : ''}{d.cumulativeReturn?.toFixed(2)}%
                       </span>
                     </div>
@@ -100,7 +106,7 @@ export function ReturnBarChart({
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.isPositive ? '#7c3aed' : '#a78bfa'}
+                fill={entry.isPositive ? color : lighterColor}
               />
             ))}
           </Bar>

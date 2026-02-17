@@ -4,22 +4,22 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Play, BarChart3, Activity, Filter, 
-  ChevronDown, Download, ChevronLeft, ChevronRight,
-  ArrowUpRight, ArrowDownRight, RefreshCw,
-  Settings, LogOut, Calendar
+  CalendarDays, TrendingUp, Download, Settings2,
+  ChevronDown, RefreshCw, HelpCircle, Zap, BarChart3,
+  Layers, LineChart, Calendar
 } from 'lucide-react';
 import { createChart, ColorType } from 'lightweight-charts';
+import { AreaChart, Area, XAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 import { analysisApi } from '@/lib/api';
 import { useAnalysisStore } from '@/store/analysisStore';
 import { useChartSelectionStore } from '@/store/chartSelectionStore';
-import { CumulativeChartWithDragSelect } from '@/components/charts';
+import { CumulativeChartWithDragSelect, ReturnBarChart } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { HelpCircle } from 'lucide-react';
+import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
 
 import { 
   SymbolSelector, 
@@ -31,50 +31,207 @@ import {
   WeeklySuperimposedChartFilter
 } from '@/components/filters';
 
-const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
-  <div className="flex items-center justify-center">
-    <RefreshCw className={cn("animate-spin text-emerald-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
-  </div>
-);
+const PRIMARY_COLOR = '#f59e0b';
+
+// Info Tooltip Component
+function InfoTooltip({ content }: { content: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+  const handleMouseEnter = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top
+      });
+    }
+    setIsVisible(true);
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setIsVisible(false)}
+        className="ml-1.5 inline-flex items-center justify-center"
+        type="button"
+      >
+        <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-amber-600 transition-colors" />
+      </button>
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.15 }}
+            className="fixed z-[9999] w-64 px-3 py-2 bg-slate-900 text-white text-xs rounded-lg shadow-xl pointer-events-none"
+            style={{
+              left: `${position.x}px`,
+              top: `${position.y - 10}px`,
+              transform: 'translate(-50%, -100%)'
+            }}
+          >
+            <div className="relative">
+              {content}
+              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-slate-900" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Placeholder State
+function PlaceholderState() {
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-slate-300">
+      <Zap className="h-12 w-12 mb-3 opacity-50" />
+      <p className="text-sm font-medium">Select a symbol to begin analysis</p>
+      <p className="text-xs mt-1 opacity-70">Choose filters and click analyze</p>
+    </div>
+  );
+}
+
+// Weekly Analytics Matrix Component
+function WeeklyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
+  const distributionData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const weekGroups: Record<number, number[]> = {};
+    data.forEach((d: any) => {
+      const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+      if (!weekGroups[weekNum]) weekGroups[weekNum] = [];
+      weekGroups[weekNum].push(d.returnPercentage || 0);
+    });
+
+    const sortedWeeks = Object.keys(weekGroups).map(Number).sort((a, b) => a - b);
+    return sortedWeeks.map(weekNum => ({
+      name: `W${weekNum}`,
+      week: weekNum,
+      count: weekGroups[weekNum].length,
+      avgReturn: weekGroups[weekNum].reduce((a, b) => a + b, 0) / weekGroups[weekNum].length,
+    }));
+  }, [data]);
+
+  const weeklyMetrics = useMemo(() => {
+    if (!data || data.length === 0 || !stats) return [];
+
+    const weekGroups: Record<number, number[]> = {};
+    data.forEach((d: any) => {
+      const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+      if (!weekGroups[weekNum]) weekGroups[weekNum] = [];
+      weekGroups[weekNum].push(d.returnPercentage || 0);
+    });
+
+    const weekStats = Object.entries(weekGroups).map(([week, returns]) => {
+      const avg = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const positive = returns.filter((r: number) => r > 0).length;
+      return {
+        week: parseInt(week),
+        avgReturn: avg,
+        winRate: (positive / returns.length) * 100,
+        totalReturn: returns.reduce((a: number, b: number) => a + b, 0),
+      };
+    });
+
+    if (weekStats.length === 0) return [];
+
+    const bestWeek = weekStats.reduce((a, b) => a.avgReturn > b.avgReturn ? a : b);
+    const worstWeek = weekStats.reduce((a, b) => a.avgReturn < b.avgReturn ? a : b);
+    const mostConsistent = weekStats.reduce((a, b) => Math.abs(a.winRate - 50) < Math.abs(b.winRate - 50) ? a : b);
+
+    return [
+      { label: 'Best Week', value: `W${bestWeek.week}`, trend: 'up', subType: `${bestWeek.avgReturn.toFixed(2)}% avg` },
+      { label: 'Worst Week', value: `W${worstWeek.week}`, trend: 'down', subType: `${worstWeek.avgReturn.toFixed(2)}% avg` },
+      { label: 'Most Consistent', value: `W${mostConsistent.week}`, trend: mostConsistent.winRate > 50 ? 'up' : 'down', subType: `${mostConsistent.winRate.toFixed(1)}% win rate` },
+      { label: 'CAGR', value: `${(stats.cagr || 0).toFixed(2)}%`, trend: (stats.cagr || 0) > 0 ? 'up' : 'down', subType: 'Annual Return' },
+    ];
+  }, [data, stats]);
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col h-full font-sans">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Analytics Matrix</h3>
+        <span className="px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-400">
+          WEEKLY DISTRIBUTION
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Week Distribution Chart */}
+        <div className="flex-1 min-h-0 mb-4 relative">
+          {distributionData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={distributionData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                <linearGradient id="colorCountWeekly" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <RechartsTooltip
+                  content={(props: any) => {
+                    const { active, payload } = props;
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-slate-900 text-white text-xs p-2 rounded shadow-xl border border-slate-800">
+                          <p className="font-bold mb-1">Week {payload[0]?.payload?.week}</p>
+                          <p className="text-amber-300">Avg Return: {payload[0]?.payload?.avgReturn?.toFixed(2)}%</p>
+                          <p className="text-slate-300">Samples: {payload[0]?.payload?.count}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <XAxis dataKey="name" hide />
+                <Area
+                  type="monotone"
+                  dataKey="avgReturn"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  fill="url(#colorCountWeekly)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-slate-300 text-xs">No data</div>
+          )}
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {weeklyMetrics.map((metric) => (
+            <div key={metric.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{metric.label}</div>
+              <div className="flex items-baseline gap-1">
+                <span className={cn(
+                  "text-lg font-bold",
+                  metric.trend === 'up' ? "text-amber-600" : metric.trend === 'down' ? "text-rose-600" : "text-slate-800"
+                )}>
+                  {metric.value}
+                </span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5">{metric.subType}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function WeeklyPage() {
   const { selectedSymbols, startDate, endDate, filters, chartScale, setChartScale } = useAnalysisStore();
   const { timeRangeSelection, clearTimeRangeSelection } = useChartSelectionStore();
   const [weekType, setWeekType] = useState<'monday' | 'expiry'>('expiry');
-  const [activeTab, setActiveTab] = useState('chart');
-  const [chartMode, setChartMode] = useState<'cumulative' | 'superimposed' | 'yearly-overlay'>('cumulative');
+  const [activeChart, setActiveChart] = useState<'cumulative' | 'yearly'>('cumulative');
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterWidth, setFilterWidth] = useState(280);
-  const [isResizing, setIsResizing] = useState(false);
-  const chartRef = React.useRef<HTMLDivElement>(null);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX - 64;
-    if (newWidth >= 200 && newWidth <= 500) {
-      setFilterWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['weekly-analysis', selectedSymbols, startDate, endDate, filters, weekType, timeRangeSelection.startDate, timeRangeSelection.endDate],
@@ -99,495 +256,343 @@ export default function WeeklyPage() {
   const symbolData = data?.[selectedSymbols[0]];
   const stats = symbolData?.statistics;
 
-  // Snapshot function
-  const handleSnapshot = async () => {
-    if (!chartRef.current) return;
-    
-    try {
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(chartRef.current, {
-        background: '#ffffff',
-        scale: 2,
-        logging: false,
-      } as any);
-      
-      const link = document.createElement('a');
-      link.download = `${selectedSymbols[0]}_weekly_${weekType}_${new Date().toISOString().split('T')[0]}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (error) {
-      console.error('Failed to capture snapshot:', error);
-    }
-  };
-
-  // Export CSV
-  const handleExportCSV = () => {
-    if (!symbolData?.chartData) return;
-    
-    const csvData = symbolData.chartData.map((row: any) => ({
-      Date: new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-      'Return %': row.returnPercentage?.toFixed(2),
-      'Cumulative': row.cumulative?.toFixed(2),
-    }));
-    
-    const headers = Object.keys(csvData[0]).join(',');
-    const rows = csvData.map((row: any) => Object.values(row).join(',')).join('\n');
-    const csv = `${headers}\n${rows}`;
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const link = document.createElement('a');
-    link.download = `${selectedSymbols[0]}_weekly_${weekType}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.href = URL.createObjectURL(blob);
-    link.click();
-  };
-
   return (
-    <div className="flex h-full bg-slate-50" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
-      {/* LEFT SIDEBAR - FILTER CONSOLE */}
-      <aside 
-        style={{ 
-          width: filterOpen ? filterWidth : 0,
-          transition: isResizing ? 'none' : 'width 0.3s ease-out'
-        }}
-        className="bg-white border-r border-slate-200 flex flex-col overflow-hidden relative"
-      >
-        <div className="flex-shrink-0 h-14 border-b border-slate-100 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-emerald-600" />
-            <h2 className="font-bold text-sm text-slate-700 uppercase tracking-wider">Filter Console</h2>
-          </div>
-          <button 
-            onClick={() => setFilterOpen(false)}
-            className="p-1 hover:bg-slate-100 rounded"
-          >
-            <ChevronLeft className="h-4 w-4 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Market Context */}
-          <FilterSection title="Market Context" defaultOpen>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
-                <SymbolSelector />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Week Type</label>
-                <Select value={weekType} onValueChange={(v) => setWeekType(v as 'monday' | 'expiry')}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white shadow-lg">
-                    <SelectItem value="monday">Monday Week</SelectItem>
-                    <SelectItem value="expiry">Expiry Week</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </FilterSection>
-
-          {/* Time Ranges */}
-          <FilterSection title="Time Ranges" defaultOpen>
-            <div className="space-y-3">
-              <DateRangePicker />
-            </div>
-          </FilterSection>
-
-          {/* Temporal Filters */}
-          <FilterSection title="Year Filters">
-            <YearFilters />
-          </FilterSection>
-
-          <FilterSection title="Month Filters">
-            <MonthFilters />
-          </FilterSection>
-
-          <FilterSection title="Week Filters">
-            <WeekFilters weekType={weekType} />
-          </FilterSection>
-
-          {/* Advanced Filters */}
-          <FilterSection title="Advanced Filters">
-            <SpecialDaysFilter />
-            <div className="mt-3 pt-3 border-t border-slate-200">
-              <WeeklySuperimposedChartFilter />
-            </div>
-          </FilterSection>
-        </div>
-
-        {/* Apply Filters Button */}
-        <div className="flex-shrink-0 p-3 border-t border-slate-100">
-          <Button 
-            onClick={() => refetch()} 
-            disabled={isFetching || selectedSymbols.length === 0}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg"
-          >
-            {isFetching ? (
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Computing...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Play className="h-4 w-4 fill-current" />
-                APPLY FILTERS
-              </div>
-            )}
-          </Button>
-        </div>
-
-        {/* RESIZE HANDLE */}
-        {filterOpen && (
-          <div
-            onMouseDown={handleMouseDown}
-            className={cn(
-              "absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-emerald-400 transition-colors group",
-              isResizing && "bg-emerald-500"
-            )}
-          >
-            <div className="absolute right-0 top-0 bottom-0 w-4 -mr-2" />
-          </div>
-        )}
-      </aside>
-
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* TOP HEADER */}
-        <header className="flex-shrink-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4">
+    <div className="flex h-full bg-[#F8F9FB]">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+        {/* Top Header */}
+        <header className="flex-shrink-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm">
           <div className="flex items-center gap-4">
-            {!filterOpen && (
-              <button 
-                onClick={() => setFilterOpen(true)}
-                className="p-2 hover:bg-slate-100 rounded"
-              >
-                <ChevronRight className="h-5 w-5 text-slate-400" />
-              </button>
-            )}
-            <div className="flex items-center gap-3">
-              <Activity className="h-6 w-6 text-emerald-600" />
-              <div>
-                <h1 className="text-lg font-bold text-slate-900">
-                  {selectedSymbols[0] || 'Select Symbol'}
-                </h1>
-                <p className="text-xs text-slate-500">Weekly Analysis Engine ({weekType === 'monday' ? 'Monday' : 'Expiry'})</p>
-              </div>
+            <div 
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
+              style={{ backgroundColor: PRIMARY_COLOR }}
+            >
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 leading-tight">
+                {selectedSymbols[0] || 'NIFTY'}
+              </h1>
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+                Weekly Analysis Engine ({weekType === 'monday' ? 'Monday' : 'Expiry'})
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* Selection indicator */}
-            {timeRangeSelection.isActive && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <div className="text-xs font-semibold text-emerald-700">
-                  {timeRangeSelection.startDate} → {timeRangeSelection.endDate}
-                </div>
-                <button
-                  onClick={clearTimeRangeSelection}
-                  className="text-emerald-600 hover:text-emerald-800 font-bold"
-                  title="Clear selection"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-            
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-500 font-semibold">1H</span>
-              <span className="text-slate-500 font-semibold">1D</span>
-              <span className="text-emerald-600 font-bold">1W</span>
-              <span className="text-slate-500 font-semibold">1M</span>
-            </div>
-            
-            {/* User Profile Section */}
-            <div className="flex items-center gap-2 ml-4 pl-4 border-l border-slate-200">
-              <button
-                onClick={() => {}}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
-                title="Settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-              
-              <button
-                onClick={() => {
-                  if (typeof window !== 'undefined') {
-                    localStorage.removeItem('accessToken');
-                    window.location.href = '/login';
-                  }
-                }}
-                className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all"
-                title="Logout"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xs cursor-pointer" title={selectedSymbols[0] || 'User'}>
-                {selectedSymbols[0]?.charAt(0) || 'U'}
-              </div>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+              Analyze
+            </Button>
+            <div 
+              className="h-10 w-10 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm"
+              style={{ backgroundColor: PRIMARY_COLOR }}
+            >
+              {selectedSymbols[0]?.charAt(0) || 'N'}
             </div>
           </div>
         </header>
 
-        {/* STATISTICS CARDS */}
-        {stats && (
-          <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 py-3">
-            <div className="grid grid-cols-4 gap-4">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Stats Strip */}
+          {stats && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="grid grid-cols-5 gap-4"
+            >
               <StatCard
-                label="CAGR"
-                value={`${(stats.cagr || 0).toFixed(2)}%`}
-                subtitle={`Avg: ${(stats.avgReturnAll || 0).toFixed(2)}%`}
-                trend={(stats.cagr || 0) >= 0 ? 'up' : 'down'}
+                label="TOTAL WEEKS"
+                value={stats.totalCount?.toString() || '0'}
+                trend="neutral"
+                subValue={`${stats.positiveCount || 0} positive`}
+                metricKey="totalCount"
               />
               <StatCard
                 label="WIN RATE"
                 value={`${(stats.winRate || 0).toFixed(1)}%`}
-                subtitle="Hist. Avg"
                 trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
+                subValue={`${stats.positiveCount || 0} wins`}
+                metricKey="winRate"
               />
               <StatCard
-                label="MAX DRAWDOWN"
-                value={`${(stats.maxDrawdown || 0).toFixed(2)}%`}
-                subtitle={`Max Gain: ${(stats.maxGain || 0).toFixed(2)}%`}
-                trend="down"
+                label="AVG RETURN"
+                value={`${(stats.avgReturnAll || 0).toFixed(2)}%`}
+                trend={(stats.avgReturnAll || 0) >= 0 ? 'up' : 'down'}
+                subValue={`Median: ${((stats.sumReturnAll || 0) / (stats.totalCount || 1)).toFixed(2)}%`}
+                metricKey="avgReturn"
               />
               <StatCard
-                label="SHARPE RATIO"
-                value={(stats.sharpeRatio || 0).toFixed(2)}
-                subtitle={
-                  stats.sharpeRatio > 2 ? 'Excellent' :
-                  stats.sharpeRatio > 1 ? 'Good' :
-                  stats.sharpeRatio > 0 ? 'Fair' : 'Poor'
-                }
-                trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
+                label="CAGR"
+                value={`${(stats.cagr || 0).toFixed(2)}%`}
+                trend={(stats.cagr || 0) > 0 ? 'up' : 'down'}
+                subValue={`Sharpe: ${(stats.sharpeRatio || 0).toFixed(2)}`}
+                metricKey="cagr"
               />
-            </div>
-          </div>
-        )}
+              <StatCard
+                label="MAX DD"
+                value={`${Math.abs(stats.maxDrawdown || 0).toFixed(2)}%`}
+                trend={(stats.maxDrawdown || 0) > -10 ? 'up' : 'down'}
+                subValue={`StdDev: ${(stats.stdDev || 0).toFixed(2)}`}
+                metricKey="maxDrawdown"
+              />
+            </motion.div>
+          )}
 
-        {/* CHART AREA */}
-        <div className={cn("flex-1 p-4", activeTab === 'data' ? 'overflow-visible' : 'overflow-hidden')}>
-          <div className="h-full bg-white rounded-lg border border-slate-200 flex flex-col">
-            {/* Chart Header */}
-            <div className="flex-shrink-0 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-700">
-                {chartMode === 'cumulative' ? 'Cumulative Returns' : 
-                 chartMode === 'superimposed' ? 'Superimposed Pattern' : 
-                 'Yearly Overlay Pattern'}
-              </h3>
-              <div className="flex items-center gap-2">
-                {/* Chart Mode Toggle */}
-                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setChartMode('cumulative')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'cumulative' 
-                        ? "bg-white text-emerald-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Cumulative
-                  </button>
-                  <button
-                    onClick={() => setChartMode('superimposed')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'superimposed' 
-                        ? "bg-white text-emerald-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Superimposed
-                  </button>
-                  <button
-                    onClick={() => setChartMode('yearly-overlay')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'yearly-overlay' 
-                        ? "bg-white text-emerald-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Yearly Overlay
-                  </button>
+          {/* Chart Mode Selector */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 w-fit shadow-sm"
+          >
+            {[
+              { id: 'cumulative', label: 'Cumulative' },
+              { id: 'yearly', label: 'Yearly' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => setActiveChart(mode.id as any)}
+                className={cn(
+                  "px-5 py-2 text-xs font-semibold rounded-lg transition-all duration-200",
+                  activeChart === mode.id
+                    ? "text-white shadow-md"
+                    : "text-slate-600 hover:bg-slate-50"
+                )}
+                style={activeChart === mode.id ? { backgroundColor: PRIMARY_COLOR } : {}}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </motion.div>
+
+          {/* Main Chart + Analytics Matrix */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            className="grid grid-cols-3 gap-6 h-[420px]"
+          >
+            {/* Main Chart */}
+            <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden">
+              <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-800 text-sm">
+                    {activeChart === 'cumulative' && 'Cumulative Returns'}
+                    {activeChart === 'yearly' && 'Yearly Overlay Pattern'}
+                  </h3>
+                  <InfoTooltip content="Select different chart modes to visualize the data in different ways." />
                 </div>
-                
-                <div className="w-px h-6 bg-slate-200"></div>
-                
-                <button
-                  onClick={() => setActiveTab('chart')}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                    activeTab === 'chart' 
-                      ? "bg-emerald-50 text-emerald-600" 
-                      : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  Chart
-                </button>
-                <button
-                  onClick={() => setActiveTab('table')}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                    activeTab === 'table' 
-                      ? "bg-emerald-50 text-emerald-600" 
-                      : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  Data
-                </button>
-                
-                {activeTab === 'chart' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleSnapshot}
-                    disabled={!symbolData}
-                  >
-                    SNAPSHOT
-                  </Button>
+              </div>
+              <div className="flex-1 w-full relative p-4">
+                {!symbolData ? (
+                  <PlaceholderState />
+                ) : activeChart === 'cumulative' ? (
+                  <CumulativeChartWithDragSelect
+                    data={symbolData.chartData}
+                    chartScale="linear"
+                    chartColor="#f59e0b"
+                  />
+                ) : (
+                  <YearlyOverlayChart 
+                    data={symbolData.tableData}
+                    symbol={selectedSymbols[0]}
+                  />
                 )}
               </div>
             </div>
 
-            {/* Chart Content */}
-            <div className={cn("flex-1 p-4", activeTab === 'data' ? 'overflow-visible' : 'overflow-hidden')} ref={chartRef}>
-              <AnimatePresence mode="wait">
-                {isLoading ? (
-                  <motion.div 
-                    key="loading"
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }}
-                    className="h-full flex flex-col items-center justify-center"
-                  >
-                    <Loading size="lg" />
-                    <p className="mt-4 text-sm text-slate-500">Loading market data...</p>
-                  </motion.div>
-                ) : !symbolData ? (
-                  <motion.div 
-                    key="empty"
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }}
-                    className="h-full flex flex-col items-center justify-center"
-                  >
-                    <BarChart3 className="h-16 w-16 text-slate-200 mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-700">System Idle</h3>
-                    <p className="text-sm text-slate-500 mt-2">Configure filters and click Apply Filters</p>
-                  </motion.div>
-                ) : (
-                  <motion.div 
-                    key="content"
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }}
-                    className="h-full"
-                  >
-                    {activeTab === 'chart' ? (
-                      chartMode === 'cumulative' ? (
-                        <CumulativeChartWithDragSelect 
-                          data={symbolData.chartData} 
-                          chartScale={chartScale}
-                          onRangeSelected={(start, end) => {
-                            console.log('📊 Weekly - Range selected:', start, 'to', end);
-                          }}
-                        />
-                      ) : chartMode === 'superimposed' ? (
-                        <SuperimposedChart 
-                          data={symbolData.tableData}
-                          symbol={selectedSymbols[0]}
-                        />
-                      ) : (
-                        <YearlyOverlayChart 
-                          data={symbolData.tableData}
-                          symbol={selectedSymbols[0]}
-                        />
-                      )
-                    ) : (
-                      <SeasonalDataTable data={symbolData.chartData} />
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Stat Card Component
-function StatCard({ label, value, subtitle, change, trend }: {
-  label: string;
-  value: string;
-  subtitle?: string;
-  change?: string;
-  trend?: 'up' | 'down';
-}) {
-  return (
-    <div className="bg-slate-50 rounded-lg p-3">
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-        {label}
-      </div>
-      <div className="flex items-baseline gap-2">
-        <div className="text-xl font-bold text-slate-900">{value}</div>
-        {change && (
-          <div className={cn(
-            "text-xs font-semibold flex items-center gap-1",
-            trend === 'up' ? "text-green-600" : "text-red-600"
-          )}>
-            {trend === 'up' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-            {change}
-          </div>
-        )}
-      </div>
-      {subtitle && (
-        <div className="text-xs text-slate-500 mt-1">{subtitle}</div>
-      )}
-    </div>
-  );
-}
-
-// Filter Section Component
-function FilterSection({ title, children, defaultOpen = false }: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors"
-      >
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{title}</span>
-        <ChevronDown className={cn(
-          "h-4 w-4 text-slate-400 transition-transform",
-          isOpen && "rotate-180"
-        )} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="p-3 bg-white">
-              {children}
+            {/* Analytics Matrix */}
+            <div className="col-span-1 h-full">
+              <WeeklyAnalyticsMatrix
+                data={symbolData?.tableData || []}
+                stats={stats}
+              />
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+
+          {/* Secondary Panels - Superimposed & Pattern Returns */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+            className="grid grid-cols-2 gap-6 h-[320px]"
+          >
+            {/* Superimposed Chart */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-800 text-sm">Superimposed Pattern</h3>
+                  <InfoTooltip content="Shows average pattern across all years overlaid as a single compounded line." />
+                </div>
+              </div>
+              <div className="flex-1 w-full p-4 relative">
+                {symbolData ? (
+                  <SuperimposedChart 
+                    data={symbolData.tableData}
+                    symbol={selectedSymbols[0]}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
+                )}
+              </div>
+            </div>
+
+            {/* Weekly Returns */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-800 text-sm">Weekly Returns</h3>
+                  <InfoTooltip content="Bar chart showing each week's return. Green = positive, Red = negative." />
+                </div>
+              </div>
+              <div className="flex-1 w-full p-4 relative">
+                {symbolData?.chartData?.length > 0 ? (
+                  <ReturnBarChart
+                    data={symbolData.chartData.map((d: any) => ({ date: d.date, returnPercentage: d.returnPercentage || 0 }))}
+                    symbol={selectedSymbols[0]}
+                    config={{ title: '', height: 240 }}
+                    color="#f59e0b"
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Right Filter Console */}
+      <RightFilterConsole
+        isOpen={filterOpen}
+        onToggle={() => setFilterOpen(!filterOpen)}
+        onApply={() => refetch()}
+        isLoading={isFetching}
+        title="Filters"
+        subtitle="Configure Analysis"
+        primaryColor={PRIMARY_COLOR}
+      >
+        {/* Market Context */}
+        <FilterSection 
+          title="Market Context" 
+          defaultOpen
+          icon={<BarChart3 className="h-3.5 w-3.5" />}
+          delay={0}
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Asset Class</label>
+              <SymbolSelector />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Week Type</label>
+              <Select value={weekType} onValueChange={(v) => setWeekType(v as 'monday' | 'expiry')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white shadow-lg">
+                  <SelectItem value="monday">Monday Week</SelectItem>
+                  <SelectItem value="expiry">Expiry Week</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </FilterSection>
+
+        {/* Time Ranges */}
+        <FilterSection 
+          title="Time Ranges" 
+          defaultOpen
+          icon={<Calendar className="h-3.5 w-3.5" />}
+          delay={0.05}
+        >
+          <DateRangePicker />
+        </FilterSection>
+
+        {/* Temporal Filters */}
+        <FilterSection 
+          title="Temporal Filters" 
+          icon={<Layers className="h-3.5 w-3.5" />}
+          badge={3}
+          delay={0.1}
+        >
+          <div className="space-y-4">
+            <YearFilters />
+            <MonthFilters />
+            <WeekFilters weekType={weekType} />
+          </div>
+        </FilterSection>
+
+        {/* Advanced Filters */}
+        <FilterSection 
+          title="Advanced Filters" 
+          icon={<LineChart className="h-3.5 w-3.5" />}
+          delay={0.15}
+        >
+          <div className="space-y-4">
+            <SpecialDaysFilter />
+            <div className="pt-3 border-t border-slate-100">
+              <WeeklySuperimposedChartFilter />
+            </div>
+          </div>
+        </FilterSection>
+      </RightFilterConsole>
     </div>
   );
 }
 
-// Superimposed Chart - Shows average pattern across all years
+// Stat Card Component with Metric Tooltip
+function StatCard({ label, value, subValue, trend, metricKey }: {
+  label: string;
+  value: string;
+  subValue?: string;
+  trend?: 'up' | 'down' | 'neutral';
+  metricKey?: keyof typeof METRIC_DEFINITIONS;
+}) {
+  const metricDef = metricKey ? METRIC_DEFINITIONS[metricKey] : undefined;
+  
+  return (
+    <motion.div 
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.2 }}
+      className="bg-white rounded-xl p-5 border border-slate-200 hover:border-slate-300 transition-colors shadow-sm hover:shadow-md"
+    >
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center">
+        {label}
+        {metricKey && <MetricTooltip metric={metricKey} />}
+      </div>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-baseline gap-2">
+          <div className="text-2xl font-bold text-slate-900">{value}</div>
+          {trend && trend !== 'neutral' && (
+            <div className={cn(
+              "text-xs font-bold",
+              trend === 'up' ? "text-amber-600" : "text-rose-600"
+            )}>
+              {trend === 'up' ? '↗' : '↘'}
+            </div>
+          )}
+        </div>
+        {subValue && (
+          <div className="text-[10px] font-semibold text-slate-400 mt-0.5">
+            {subValue}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// Superimposed Chart Component
 function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -597,7 +602,6 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
   const weeklySuperimposedChartType = filters.weeklySuperimposedChartType || 'YearlyWeeks';
   const electionChartTypes = filters.electionChartTypes || ['All Years'];
 
-  // Election years data
   const electionYears = {
     'Election Years': [1952, 1957, 1962, 1967, 1971, 1977, 1980, 1984, 1989, 1991, 1996, 1998, 1999, 2004, 2009, 2014, 2019],
     'Pre Election Years': [1951, 1956, 1961, 1966, 1970, 1976, 1979, 1983, 1988, 1990, 1995, 1997, 1998, 2003, 2008, 2013, 2018],
@@ -609,7 +613,6 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
   useEffect(() => {
     if (!chartContainerRef.current || !data || data.length === 0) return;
 
-    // Filter data based on election chart types
     let filteredData = [...data];
     
     if (!electionChartTypes.includes('All Years')) {
@@ -628,7 +631,6 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
       });
     }
 
-    // Group by week number based on chart type
     const weekGroups: Record<number, number[]> = {};
     const groupByField = weeklySuperimposedChartType === 'YearlyWeeks' ? 'weekNumberYearly' : 'weekNumberMonthly';
     
@@ -640,20 +642,17 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
       weekGroups[weekNum].push(d.returnPercentage || 0);
     });
 
-    // Calculate average return for each week and compound it
     const sortedWeeks = Object.keys(weekGroups).map(Number).sort((a, b) => a - b);
-    let compoundedValue = 1; // Start at 1 (100%)
+    let compoundedValue = 1;
     
     const superimposedData = sortedWeeks.map(weekNum => {
       const avgReturn = weekGroups[weekNum].reduce((sum, val) => sum + val, 0) / weekGroups[weekNum].length;
-      
-      // Compound: multiply by (1 + avgReturn/100)
       compoundedValue = compoundedValue * (1 + avgReturn / 100);
       
       return {
         weekNumber: weekNum,
         avgReturn,
-        compoundedReturn: (compoundedValue - 1) * 100, // Convert back to percentage
+        compoundedReturn: (compoundedValue - 1) * 100,
       };
     });
 
@@ -672,12 +671,12 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
         mode: 1,
         vertLine: {
           width: 1,
-          color: '#10b981',
+          color: '#f59e0b',
           style: 2,
         },
         horzLine: {
           width: 1,
-          color: '#10b981',
+          color: '#f59e0b',
           style: 2,
         },
       },
@@ -703,8 +702,6 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
     }));
 
     areaSeries.setData(chartData as any);
-    
-    // Configure time scale to show week numbers
     chart.timeScale().fitContent();
     (chart.timeScale() as any).applyOptions({
       tickMarkFormatter: (time: any) => {
@@ -712,7 +709,6 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
       },
     });
 
-    // Tooltip handler
     chart.subscribeCrosshairMove((param: any) => {
       if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
         setTooltip(null);
@@ -762,7 +758,7 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
           }}
         >
           <div className="font-semibold text-slate-700 mb-1">Week {tooltip.week}</div>
-          <div className="text-emerald-600 font-bold">
+          <div className="text-amber-600 font-bold">
             {weeklySuperimposedChartType === 'YearlyWeeks' ? 'YTD' : 'MTD'} Return: {tooltip.value.toFixed(2)}%
           </div>
           <div className="text-slate-600">
@@ -774,155 +770,7 @@ function SuperimposedChart({ data, symbol }: { data: any[]; symbol: string }) {
   );
 }
 
-// Cumulative Chart Component
-function CumulativeChart({ data, chartScale }: { 
-  data: any[]; 
-  chartScale: 'linear' | 'log';
-}) {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
-  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; date: string; value: number } | null>(null);
-  const { filters } = useAnalysisStore();
-  
-  const electionChartTypes = filters.electionChartTypes || ['All Years'];
-
-  // Election years data
-  const electionYears = {
-    'Election Years': [1952, 1957, 1962, 1967, 1971, 1977, 1980, 1984, 1989, 1991, 1996, 1998, 1999, 2004, 2009, 2014, 2019],
-    'Pre Election Years': [1951, 1956, 1961, 1966, 1970, 1976, 1979, 1983, 1988, 1990, 1995, 1997, 1998, 2003, 2008, 2013, 2018],
-    'Post Election Years': [1953, 1958, 1963, 1968, 1972, 1978, 1981, 1985, 1990, 1992, 1997, 1999, 2000, 2005, 2010, 2015, 2020],
-    'Mid Election Years': [1954, 1955, 1959, 1960, 1964, 1965, 1969, 1973, 1974, 1975, 1982, 1986, 1987, 1993, 1994, 2001, 2002, 2006, 2007, 2011, 2012, 2016, 2017, 2021, 2022],
-    'Modi Years': [2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
-  };
-
-  useEffect(() => {
-    if (!chartContainerRef.current || !data || data.length === 0) return;
-
-    // Filter data based on election chart types
-    let filteredData = [...data];
-    
-    if (!electionChartTypes.includes('All Years')) {
-      filteredData = data.filter((d: any) => {
-        const year = new Date(d.weekStartDate || d.date).getFullYear();
-        const currentYear = new Date().getFullYear();
-        
-        return electionChartTypes.some(type => {
-          if (type === 'Current Year') {
-            return year === currentYear;
-          } else if (electionYears[type as keyof typeof electionYears]) {
-            return electionYears[type as keyof typeof electionYears].includes(year);
-          }
-          return false;
-        });
-      });
-    }
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#ffffff' },
-        textColor: '#64748b',
-      },
-      width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight,
-      grid: {
-        vertLines: { color: '#e2e8f0' },
-        horzLines: { color: '#e2e8f0' },
-      },
-      crosshair: {
-        mode: 1,
-        vertLine: {
-          width: 1,
-          color: '#10b981',
-          style: 2,
-        },
-        horzLine: {
-          width: 1,
-          color: '#10b981',
-          style: 2,
-        },
-      },
-    });
-
-    chartRef.current = chart;
-
-    const areaSeries = chart.addAreaSeries({
-      lineColor: '#10b981',
-      topColor: 'rgba(16, 185, 129, 0.4)',
-      bottomColor: 'rgba(16, 185, 129, 0.0)',
-      lineWidth: 2,
-    });
-
-    const chartData = filteredData.map((d: any) => ({
-      time: (new Date(d.date).getTime() / 1000) as any,
-      value: d.cumulative || 0,
-    }));
-
-    areaSeries.setData(chartData as any);
-    chart.timeScale().fitContent();
-
-    // Tooltip handler
-    chart.subscribeCrosshairMove((param: any) => {
-      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
-        setTooltip(null);
-        return;
-      }
-
-      const dataPoint = param.seriesData.get(areaSeries);
-      if (dataPoint) {
-        const dateStr = new Date(param.time * 1000).toLocaleDateString('en-IN', { 
-          day: '2-digit', 
-          month: 'short', 
-          year: 'numeric' 
-        });
-        
-        setTooltip({
-          visible: true,
-          x: param.point.x,
-          y: param.point.y,
-          date: dateStr,
-          value: dataPoint.value,
-        });
-      }
-    });
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-    };
-  }, [data, chartScale, electionChartTypes]);
-
-  return (
-    <div ref={chartContainerRef} className="h-full w-full relative">
-      {tooltip && tooltip.visible && (
-        <div
-          className="absolute pointer-events-none bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs z-50"
-          style={{
-            left: `${tooltip.x + 10}px`,
-            top: `${tooltip.y - 50}px`,
-          }}
-        >
-          <div className="font-semibold text-slate-700 mb-1">{tooltip.date}</div>
-          <div className="text-emerald-600 font-bold">
-            Cumulative: {tooltip.value.toFixed(2)}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Yearly Overlay Chart - Shows each year's pattern overlaid
+// Yearly Overlay Chart Component
 function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -931,7 +779,6 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
   
   const electionChartTypes = filters.electionChartTypes || ['All Years'];
 
-  // Election years data
   const electionYears = {
     'Election Years': [1952, 1957, 1962, 1967, 1971, 1977, 1980, 1984, 1989, 1991, 1996, 1998, 1999, 2004, 2009, 2014, 2019],
     'Pre Election Years': [1951, 1956, 1961, 1966, 1970, 1976, 1979, 1983, 1988, 1990, 1995, 1997, 1998, 2003, 2008, 2013, 2018],
@@ -943,7 +790,6 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
   useEffect(() => {
     if (!chartContainerRef.current || !data || data.length === 0) return;
 
-    // Filter data based on election chart types
     let filteredData = [...data];
     
     if (!electionChartTypes.includes('All Years')) {
@@ -977,12 +823,12 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
         mode: 1,
         vertLine: {
           width: 1,
-          color: '#10b981',
+          color: '#f59e0b',
           style: 2,
         },
         horzLine: {
           width: 1,
-          color: '#10b981',
+          color: '#f59e0b',
           style: 2,
         },
       },
@@ -990,7 +836,6 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
 
     chartRef.current = chart;
 
-    // Group data by year
     const yearGroups: Record<number, any[]> = {};
     filteredData.forEach((d: any) => {
       const year = new Date(d.date).getFullYear();
@@ -1003,9 +848,8 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
       });
     });
 
-    // Create a line series for each year
     const colors = [
-      '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+      '#f59e0b', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
       '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
     ];
 
@@ -1028,7 +872,6 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
       seriesMap.set(lineSeries, { year, color });
     });
 
-    // Configure time scale to show week numbers
     chart.timeScale().fitContent();
     (chart.timeScale() as any).applyOptions({
       tickMarkFormatter: (time: any) => {
@@ -1036,7 +879,6 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
       },
     });
 
-    // Tooltip handler
     chart.subscribeCrosshairMove((param: any) => {
       if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
         setTooltip(null);
@@ -1110,317 +952,6 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
                 </span>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Seasonal Data Table with multiple views
-function SeasonalDataTable({ data }: { 
-  data: any[]; 
-}) {
-  const [page, setPage] = useState(0);
-  const [tableType, setTableType] = useState<string>('all-weeks');
-  const pageSize = 20;
-  
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    return (
-      <div className="text-center py-8 text-slate-500">
-        No data available
-      </div>
-    );
-  }
-
-  // Generate different table views based on tableType
-  const getTableData = () => {
-    switch (tableType) {
-      case 'all-weeks':
-        return data.map((row) => ({
-          date: new Date(row.date || row.weekStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-          return: row.returnPercentage?.toFixed(2),
-          cumulative: row.cumulative?.toFixed(2),
-        }));
-      
-      case 'yearly-weeks':
-        const yearlyWeekGroups: Record<number, { returns: number[]; count: number }> = {};
-        
-        data.forEach((row) => {
-          const weekNum = row.weekNumberYearly || 0;
-          if (!yearlyWeekGroups[weekNum]) {
-            yearlyWeekGroups[weekNum] = { returns: [], count: 0 };
-          }
-          yearlyWeekGroups[weekNum].returns.push(row.returnPercentage || 0);
-          yearlyWeekGroups[weekNum].count++;
-        });
-        
-        return Object.keys(yearlyWeekGroups).sort((a, b) => parseInt(a) - parseInt(b)).map((weekNum) => {
-          const group = yearlyWeekGroups[parseInt(weekNum)];
-          const avgReturn = group.returns.reduce((sum, val) => sum + val, 0) / group.returns.length;
-          const positive = group.returns.filter(r => r > 0).length;
-          const negative = group.returns.filter(r => r < 0).length;
-          const winRate = (positive / group.count) * 100;
-          
-          return {
-            week: `Week ${weekNum}`,
-            count: group.count,
-            avgReturn: avgReturn.toFixed(2),
-            positive,
-            negative,
-            winRate: winRate.toFixed(1),
-          };
-        });
-      
-      case 'monthly-weeks':
-        const monthlyWeekGroups: Record<number, { returns: number[]; count: number }> = {};
-        
-        data.forEach((row) => {
-          const weekNum = row.weekNumberMonthly || 0;
-          if (!monthlyWeekGroups[weekNum]) {
-            monthlyWeekGroups[weekNum] = { returns: [], count: 0 };
-          }
-          monthlyWeekGroups[weekNum].returns.push(row.returnPercentage || 0);
-          monthlyWeekGroups[weekNum].count++;
-        });
-        
-        return Object.keys(monthlyWeekGroups).sort((a, b) => parseInt(a) - parseInt(b)).map((weekNum) => {
-          const group = monthlyWeekGroups[parseInt(weekNum)];
-          const avgReturn = group.returns.reduce((sum, val) => sum + val, 0) / group.returns.length;
-          const positive = group.returns.filter(r => r > 0).length;
-          const negative = group.returns.filter(r => r < 0).length;
-          const winRate = (positive / group.count) * 100;
-          
-          return {
-            week: `Week ${weekNum}`,
-            count: group.count,
-            avgReturn: avgReturn.toFixed(2),
-            positive,
-            negative,
-            winRate: winRate.toFixed(1),
-          };
-        });
-      
-      case 'months':
-        const monthGroups: Record<number, { returns: number[]; count: number }> = {};
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        
-        data.forEach((row) => {
-          const month = new Date(row.date || row.weekStartDate).getMonth();
-          if (!monthGroups[month]) {
-            monthGroups[month] = { returns: [], count: 0 };
-          }
-          monthGroups[month].returns.push(row.returnPercentage || 0);
-          monthGroups[month].count++;
-        });
-        
-        return monthNames.map((monthName, idx) => {
-          const group = monthGroups[idx] || { returns: [], count: 0 };
-          if (group.count === 0) return null;
-          
-          const avgReturn = group.returns.reduce((sum, val) => sum + val, 0) / group.returns.length;
-          const positive = group.returns.filter(r => r > 0).length;
-          const negative = group.returns.filter(r => r < 0).length;
-          const winRate = (positive / group.count) * 100;
-          
-          return {
-            month: monthName,
-            count: group.count,
-            avgReturn: avgReturn.toFixed(2),
-            positive,
-            negative,
-            winRate: winRate.toFixed(1),
-          };
-        }).filter(row => row !== null);
-      
-      case 'years':
-        const yearGroups: Record<number, { returns: number[]; count: number }> = {};
-        
-        data.forEach((row) => {
-          const year = row.year || new Date(row.date || row.weekStartDate).getFullYear();
-          if (!yearGroups[year]) {
-            yearGroups[year] = { returns: [], count: 0 };
-          }
-          yearGroups[year].returns.push(row.returnPercentage || 0);
-          yearGroups[year].count++;
-        });
-        
-        return Object.keys(yearGroups).sort().map((year) => {
-          const group = yearGroups[parseInt(year)];
-          const avgReturn = group.returns.reduce((sum, val) => sum + val, 0) / group.returns.length;
-          const totalReturn = group.returns.reduce((sum, val) => sum + val, 0);
-          const positive = group.returns.filter(r => r > 0).length;
-          const negative = group.returns.filter(r => r < 0).length;
-          const winRate = (positive / group.count) * 100;
-          
-          return {
-            year,
-            count: group.count,
-            avgReturn: avgReturn.toFixed(2),
-            totalReturn: totalReturn.toFixed(2),
-            positive,
-            negative,
-            winRate: winRate.toFixed(1),
-          };
-        });
-      
-      default:
-        return [];
-    }
-  };
-
-  const tableData = getTableData();
-  const totalPages = Math.ceil(tableData.length / pageSize);
-  const paginatedData = tableData.slice(page * pageSize, (page + 1) * pageSize);
-
-  // Export CSV function
-  const handleExportCSV = () => {
-    if (!tableData || tableData.length === 0) return;
-    
-    const headers = Object.keys(tableData[0]).join(',');
-    const rows = tableData.map((row: any) => Object.values(row).join(',')).join('\n');
-    const csv = `${headers}\n${rows}`;
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const link = document.createElement('a');
-    link.download = `${tableType}_data_${new Date().toISOString().split('T')[0]}.csv`;
-    link.href = URL.createObjectURL(blob);
-    link.click();
-  };
-
-  // Column descriptions for tooltips
-  const columnDescriptions: Record<string, string> = {
-    date: 'The week start date',
-    return: 'Weekly return percentage - the percentage change for the week',
-    cumulative: 'Cumulative return - the compounded return from the start date',
-    week: 'Week number in the period (yearly or monthly)',
-    month: 'Month of the year',
-    year: 'Calendar year',
-    count: 'Number of trading weeks in this period',
-    avgReturn: 'Average return - mean of all weekly returns in this period',
-    totalReturn: 'Total return - sum of all weekly returns in this period',
-    positive: 'Number of weeks with positive returns',
-    negative: 'Number of weeks with negative returns',
-    winRate: 'Win rate - percentage of weeks with positive returns (positive weeks / total weeks × 100)',
-  };
-
-  const renderTableHeaders = () => {
-    if (tableData.length === 0) return null;
-    
-    return Object.keys(tableData[0]).map((key) => {
-      const displayName = key.replace(/([A-Z])/g, ' $1').trim();
-      const description = columnDescriptions[key];
-      
-      return (
-        <th key={key} className="px-4 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">
-          <div className="flex items-center gap-1.5">
-            <span>{displayName}</span>
-            {description && (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs">
-                    <p>{description}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        </th>
-      );
-    });
-  };
-
-  const renderTableRows = () => {
-    return paginatedData.map((row: any, idx) => (
-      <tr key={idx} className="hover:bg-slate-50">
-        {Object.entries(row).map(([key, value], cellIdx) => (
-          <td 
-            key={cellIdx} 
-            className={cn(
-              "px-4 py-2 text-sm",
-              key.includes('return') || key.includes('Return') 
-                ? parseFloat(value as string) >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'
-                : key.includes('winRate') || key.includes('Win')
-                ? parseFloat(value as string) >= 50 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'
-                : 'text-slate-900'
-            )}
-          >
-            {value as string}
-          </td>
-        ))}
-      </tr>
-    ));
-  };
-  
-  return (
-    <div className="h-full flex flex-col">
-      {/* Table Type Selector and Export */}
-      <div className="flex-shrink-0 p-4 border-b border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-slate-600">Table View:</label>
-          <Select value={tableType} onValueChange={(value) => { setTableType(value); setPage(0); }}>
-            <SelectTrigger className="w-48 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-white shadow-lg">
-              <SelectItem value="all-weeks">All Weeks</SelectItem>
-              <SelectItem value="yearly-weeks">By Yearly Week</SelectItem>
-              <SelectItem value="monthly-weeks">By Monthly Week</SelectItem>
-              <SelectItem value="months">By Month</SelectItem>
-              <SelectItem value="years">By Year</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={handleExportCSV}
-          className="gap-2"
-        >
-          <Download className="h-4 w-4" />
-          Export CSV
-        </Button>
-      </div>
-
-      {/* Table Content */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full">
-          <thead className="bg-slate-50 sticky top-0 z-[100]">
-            <tr>
-              {renderTableHeaders()}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {renderTableRows()}
-          </tbody>
-        </table>
-      </div>
-      
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex-shrink-0 p-4 border-t flex items-center justify-between">
-          <span className="text-sm text-slate-500">
-            Page {page + 1} of {totalPages} ({tableData.length} records)
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page === totalPages - 1}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-            >
-              Next
-            </button>
           </div>
         </div>
       )}

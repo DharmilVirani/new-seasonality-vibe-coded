@@ -1,13 +1,19 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Play, BarChart3, Activity, Filter, 
-  ChevronDown, Download, ChevronLeft, ChevronRight,
+  Play, BarChart3, Activity, 
+  ChevronDown, ChevronRight, ChevronLeft,
   ArrowUpRight, ArrowDownRight, RefreshCw,
-  Settings, LogOut, TrendingUp, TrendingDown
+  Settings, LogOut, TrendingUp, TrendingDown,
+  LayoutGrid,
+  Calendar,
+  Filter,
+  Shield,
+  LineChart,
+  SlidersHorizontal
 } from 'lucide-react';
 
 import { analysisApi } from '@/lib/api';
@@ -25,10 +31,13 @@ import {
   DayFilters,
   OutlierFilters
 } from '@/components/filters';
+import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+
+const PRIMARY_COLOR = '#eab308';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
-    <RefreshCw className={cn("animate-spin text-purple-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
+    <RefreshCw className={cn("animate-spin text-yellow-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
 
@@ -36,41 +45,11 @@ export default function ScenarioPage() {
   const { selectedSymbols, startDate, endDate, filters, chartScale } = useAnalysisStore();
   const [activeSection, setActiveSection] = useState<'historic' | 'streak' | 'momentum' | 'watchlist'>('historic');
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterWidth, setFilterWidth] = useState(280);
-  const [isResizing, setIsResizing] = useState(false);
 
   // Scenario-specific state
   const [historicTrendType, setHistoricTrendType] = useState<'Bullish' | 'Bearish'>('Bullish');
   const [consecutiveDays, setConsecutiveDays] = useState(3);
   const [dayRange, setDayRange] = useState(10);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX - 64;
-    if (newWidth >= 200 && newWidth <= 500) {
-      setFilterWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['scenario-analysis', selectedSymbols, startDate, endDate, filters, historicTrendType, consecutiveDays, dayRange],
@@ -93,150 +72,9 @@ export default function ScenarioPage() {
   const symbolData = data?.[selectedSymbols[0]];
 
   return (
-    <div className="flex h-full bg-slate-50" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
-      {/* LEFT SIDEBAR - FILTER CONSOLE */}
-      <aside 
-        style={{ 
-          width: filterOpen ? filterWidth : 0,
-          transition: isResizing ? 'none' : 'width 0.3s ease-out'
-        }}
-        className="bg-white border-r border-slate-200 flex flex-col overflow-hidden relative"
-      >
-        <div className="flex-shrink-0 h-14 border-b border-slate-100 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-purple-600" />
-            <h2 className="font-bold text-sm text-slate-700 uppercase tracking-wider">Scenario Filters</h2>
-          </div>
-          <button 
-            onClick={() => setFilterOpen(false)}
-            className="p-1 hover:bg-slate-100 rounded"
-          >
-            <ChevronLeft className="h-4 w-4 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Market Context */}
-          <FilterSection title="Market Context" defaultOpen>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
-                <SymbolSelector />
-              </div>
-            </div>
-          </FilterSection>
-
-          {/* Time Ranges */}
-          <FilterSection title="Time Ranges" defaultOpen>
-            <div className="space-y-3">
-              <DateRangePicker />
-            </div>
-          </FilterSection>
-
-          {/* Year Filters */}
-          <FilterSection title="Year Filters">
-            <YearFilters />
-          </FilterSection>
-
-          {/* Month Filters */}
-          <FilterSection title="Month Filters">
-            <MonthFilters />
-          </FilterSection>
-
-          {/* Week Filters */}
-          <FilterSection title="Week Filters">
-            <WeekFilters />
-          </FilterSection>
-
-          {/* Day Filters */}
-          <FilterSection title="Day Filters">
-            <DayFilters />
-          </FilterSection>
-
-          {/* Risk Management */}
-          <FilterSection title="Risk Management">
-            <OutlierFilters />
-          </FilterSection>
-
-          {/* Historic Trend Settings */}
-          <FilterSection title="Historic Trend Settings">
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Trend Type</label>
-                <Select value={historicTrendType} onValueChange={(v) => setHistoricTrendType(v as any)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white shadow-lg">
-                    <SelectItem value="Bullish">Bullish</SelectItem>
-                    <SelectItem value="Bearish">Bearish</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Consecutive Days: {consecutiveDays}</label>
-                <input
-                  type="range"
-                  min="2"
-                  max="10"
-                  value={consecutiveDays}
-                  onChange={(e) => setConsecutiveDays(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Day Range: {dayRange}</label>
-                <input
-                  type="range"
-                  min="5"
-                  max="25"
-                  step="5"
-                  value={dayRange}
-                  onChange={(e) => setDayRange(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </FilterSection>
-        </div>
-
-        {/* Apply Filters Button */}
-        <div className="flex-shrink-0 p-3 border-t border-slate-100">
-          <Button 
-            onClick={() => refetch()} 
-            disabled={isFetching || selectedSymbols.length === 0}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg"
-          >
-            {isFetching ? (
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Computing...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Play className="h-4 w-4 fill-current" />
-                APPLY FILTERS
-              </div>
-            )}
-          </Button>
-        </div>
-
-        {/* RESIZE HANDLE */}
-        {filterOpen && (
-          <div
-            onMouseDown={handleMouseDown}
-            className={cn(
-              "absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-purple-400 transition-colors group",
-              isResizing && "bg-purple-500"
-            )}
-          >
-            <div className="absolute right-0 top-0 bottom-0 w-4 -mr-2" />
-          </div>
-        )}
-      </aside>
-
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+    <div className="flex h-full bg-slate-50">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* TOP HEADER */}
         <header className="flex-shrink-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
@@ -245,11 +83,11 @@ export default function ScenarioPage() {
                 onClick={() => setFilterOpen(true)}
                 className="p-2 hover:bg-slate-100 rounded"
               >
-                <ChevronRight className="h-5 w-5 text-slate-400" />
+                <ChevronLeft className="h-5 w-5 text-slate-400" />
               </button>
             )}
             <div className="flex items-center gap-3">
-              <Activity className="h-6 w-6 text-purple-600" />
+              <Activity className="h-6 w-6 text-yellow-600" />
               <div>
                 <h1 className="text-lg font-bold text-slate-900">
                   {selectedSymbols[0] || 'Select Symbol'}
@@ -283,7 +121,7 @@ export default function ScenarioPage() {
                 <LogOut className="h-4 w-4" />
               </button>
 
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-xs cursor-pointer" title={selectedSymbols[0] || 'User'}>
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500 to-yellow-600 flex items-center justify-center text-white font-bold text-xs cursor-pointer" title={selectedSymbols[0] || 'User'}>
                 {selectedSymbols[0]?.charAt(0) || 'U'}
               </div>
             </div>
@@ -298,7 +136,7 @@ export default function ScenarioPage() {
               className={cn(
                 "px-4 py-2 text-sm font-semibold rounded-lg transition-colors",
                 activeSection === 'historic' 
-                  ? "bg-purple-100 text-purple-700" 
+                  ? "bg-yellow-100 text-yellow-700" 
                   : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -309,7 +147,7 @@ export default function ScenarioPage() {
               className={cn(
                 "px-4 py-2 text-sm font-semibold rounded-lg transition-colors",
                 activeSection === 'streak' 
-                  ? "bg-purple-100 text-purple-700" 
+                  ? "bg-yellow-100 text-yellow-700" 
                   : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -320,7 +158,7 @@ export default function ScenarioPage() {
               className={cn(
                 "px-4 py-2 text-sm font-semibold rounded-lg transition-colors",
                 activeSection === 'momentum' 
-                  ? "bg-purple-100 text-purple-700" 
+                  ? "bg-yellow-100 text-yellow-700" 
                   : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -331,7 +169,7 @@ export default function ScenarioPage() {
               className={cn(
                 "px-4 py-2 text-sm font-semibold rounded-lg transition-colors",
                 activeSection === 'watchlist' 
-                  ? "bg-purple-100 text-purple-700" 
+                  ? "bg-yellow-100 text-yellow-700" 
                   : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -383,44 +221,100 @@ export default function ScenarioPage() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-// Filter Section Component
-function FilterSection({ title, children, defaultOpen = false }: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors"
+      {/* Right Filter Console */}
+      <RightFilterConsole
+        isOpen={filterOpen}
+        onToggle={() => setFilterOpen(!filterOpen)}
+        onApply={() => refetch()}
+        isLoading={isFetching}
+        title="Scenario Filters"
+        subtitle="Configure Analysis"
+        primaryColor={PRIMARY_COLOR}
       >
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{title}</span>
-        <ChevronDown className={cn(
-          "h-4 w-4 text-slate-400 transition-transform",
-          isOpen && "rotate-180"
-        )} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="p-3 bg-white">
-              {children}
+        {/* Market Context */}
+        <FilterSection title="Market Context" defaultOpen delay={0.1} icon={<LayoutGrid className="h-4 w-4" />}>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
+              <SymbolSelector />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </FilterSection>
+
+        {/* Time Ranges */}
+        <FilterSection title="Time Ranges" defaultOpen delay={0.15} icon={<Calendar className="h-4 w-4" />}>
+          <div className="space-y-3">
+            <DateRangePicker />
+          </div>
+        </FilterSection>
+
+        {/* Year Filters */}
+        <FilterSection title="Year Filters" delay={0.2} icon={<Filter className="h-4 w-4" />}>
+          <YearFilters />
+        </FilterSection>
+
+        {/* Month Filters */}
+        <FilterSection title="Month Filters" delay={0.22} icon={<Filter className="h-4 w-4" />}>
+          <MonthFilters />
+        </FilterSection>
+
+        {/* Week Filters */}
+        <FilterSection title="Week Filters" delay={0.24} icon={<Filter className="h-4 w-4" />}>
+          <WeekFilters />
+        </FilterSection>
+
+        {/* Day Filters */}
+        <FilterSection title="Day Filters" delay={0.26} icon={<Filter className="h-4 w-4" />}>
+          <DayFilters />
+        </FilterSection>
+
+        {/* Risk Management */}
+        <FilterSection title="Risk Management" delay={0.28} icon={<Shield className="h-4 w-4" />}>
+          <OutlierFilters />
+        </FilterSection>
+
+        {/* Historic Trend Settings */}
+        <FilterSection title="Historic Trend Settings" delay={0.3} icon={<LineChart className="h-4 w-4" />}>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Trend Type</label>
+              <Select value={historicTrendType} onValueChange={(v) => setHistoricTrendType(v as any)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white shadow-lg">
+                  <SelectItem value="Bullish">Bullish</SelectItem>
+                  <SelectItem value="Bearish">Bearish</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Consecutive Days: {consecutiveDays}</label>
+              <input
+                type="range"
+                min="2"
+                max="10"
+                value={consecutiveDays}
+                onChange={(e) => setConsecutiveDays(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Day Range: {dayRange}</label>
+              <input
+                type="range"
+                min="5"
+                max="25"
+                step="5"
+                value={dayRange}
+                onChange={(e) => setDayRange(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </FilterSection>
+      </RightFilterConsole>
     </div>
   );
 }

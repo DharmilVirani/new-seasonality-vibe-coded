@@ -78,6 +78,7 @@ export interface DataTableColumn {
   align?: 'left' | 'center' | 'right';
   format?: 'number' | 'percentage' | 'currency' | 'date';
   colorCode?: boolean;
+  tooltipKey?: string;
 }
 
 export interface ChartColors {

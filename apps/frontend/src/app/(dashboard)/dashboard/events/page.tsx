@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,7 +8,11 @@ import {
   ChevronDown, ChevronRight,
   RefreshCw,
   Zap,
-  HelpCircle
+  HelpCircle,
+  LayoutGrid,
+  Calendar,
+  Flag,
+  SlidersHorizontal
 } from 'lucide-react';
 
 import { analysisApi } from '@/lib/api';
@@ -23,6 +28,10 @@ import {
   SymbolSelector,
   DateRangePicker
 } from '@/components/filters';
+import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
+
+const PRIMARY_COLOR = '#8b5cf6';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
@@ -87,8 +96,6 @@ export default function EventsPage() {
   const { selectedSymbols, startDate, endDate, chartScale } = useAnalysisStore();
   const { timeRangeSelection } = useChartSelectionStore();
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterWidth, setFilterWidth] = useState(260);
-  const [isResizing, setIsResizing] = useState(false);
 
   // Event-specific filters
   const [selectedEventName, setSelectedEventName] = useState<string>('');
@@ -99,34 +106,6 @@ export default function EventsPage() {
   const [entryPoint, setEntryPoint] = useState<'T-1_CLOSE' | 'T0_OPEN' | 'T0_CLOSE'>('T-1_CLOSE');
   const [exitPoint, setExitPoint] = useState<string>('T+10_CLOSE');
   const [minOccurrences, setMinOccurrences] = useState<number>(3);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX;
-    if (newWidth >= 200 && newWidth <= 400) {
-      setFilterWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   // Fetch event categories
   const { data: categoriesData } = useQuery({
@@ -225,225 +204,9 @@ export default function EventsPage() {
 
 
   return (
-    <div className="flex h-full bg-[#F8F9FB]" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
-
-      {/* LEFT SIDEBAR - FILTER CONSOLE */}
-      <aside
-        style={{
-          width: filterOpen ? filterWidth : 0,
-          transition: isResizing ? 'none' : 'width 0.3s ease-out'
-        }}
-        className="bg-white border-r border-slate-200 flex flex-col overflow-hidden relative flex-shrink-0 z-20"
-      >
-        <div className="flex-shrink-0 h-14 border-b border-slate-100 flex items-center justify-between px-4 bg-white">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-slate-500" />
-            <h2 className="font-semibold text-xs text-slate-600 uppercase tracking-wide">Event Filters</h2>
-          </div>
-          <button
-            onClick={() => setFilterOpen(false)}
-            className="p-1 hover:bg-slate-50 rounded transition-colors"
-          >
-            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <FilterSection title="Market Context" defaultOpen>
-            <div className="space-y-3 pt-1">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Asset Class</label>
-                <div className="text-xs font-medium text-slate-700 mb-2">Symbol</div>
-                <SymbolSelector />
-              </div>
-            </div>
-          </FilterSection>
-
-          <FilterSection title="Time Ranges" defaultOpen>
-            <div className="space-y-3 pt-1">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">End Date</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between mb-1.5">
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Last N Days (0 to disable)</label>
-                  <span className="text-[10px] font-bold text-slate-400">0</span>
-                </div>
-                <input
-                  type="number"
-                  value={0}
-                  readOnly
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none bg-slate-50 text-slate-400"
-                />
-              </div>
-            </div>
-          </FilterSection>
-
-          <FilterSection title="Event Selection" defaultOpen>
-            <div className="space-y-3 pt-1">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Country</label>
-                <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                  <SelectTrigger className="w-full h-9 text-xs">
-                    <SelectValue placeholder="Select country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="INDIA">India</SelectItem>
-                    <SelectItem value="USA">USA</SelectItem>
-                    <SelectItem value="UK">UK</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Category</label>
-                <Select value={selectedCategory || undefined} onValueChange={(val) => {
-                  setSelectedCategory(val === 'ALL_CATEGORIES' ? '' : val);
-                  setSelectedEventName('');
-                }}>
-                  <SelectTrigger className="w-full h-9 text-xs">
-                    <SelectValue placeholder="All categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL_CATEGORIES">All categories</SelectItem>
-                    {categoriesData?.map((cat: string) => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Event Name</label>
-                <Select value={selectedEventName || undefined} onValueChange={(val) => {
-                  setSelectedEventName(val === 'ALL_EVENTS' ? '' : val);
-                }}>
-                  <SelectTrigger className="w-full h-9 text-xs">
-                    <SelectValue placeholder="Select event" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL_EVENTS">All Events</SelectItem>
-                    {eventNamesData?.map((name: string) => (
-                      <SelectItem key={name} value={name}>{name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </FilterSection>
-
-          <FilterSection title="Event Window" defaultOpen>
-            <div className="space-y-3 pt-1">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Days Before Event</label>
-                <input
-                  type="number"
-                  value={windowBefore}
-                  onChange={(e) => setWindowBefore(Number(e.target.value))}
-                  min={0}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Days After Event</label>
-                <input
-                  type="number"
-                  value={windowAfter}
-                  onChange={(e) => setWindowAfter(Number(e.target.value))}
-                  min={0}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Entry Point</label>
-                <Select value={entryPoint} onValueChange={(val: 'T-1_CLOSE' | 'T0_OPEN' | 'T0_CLOSE') => setEntryPoint(val)}>
-                  <SelectTrigger className="w-full h-9 text-xs">
-                    <SelectValue placeholder="Select entry" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="T-1_CLOSE">T-1 Close</SelectItem>
-                    <SelectItem value="T0_OPEN">T0 Open</SelectItem>
-                    <SelectItem value="T0_CLOSE">T0 Close</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Exit Point</label>
-                <Select value={exitPoint} onValueChange={setExitPoint}>
-                  <SelectTrigger className="w-full h-9 text-xs">
-                    <SelectValue placeholder="Select exit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="T+1_CLOSE">T+1 Close</SelectItem>
-                    <SelectItem value="T+2_CLOSE">T+2 Close</SelectItem>
-                    <SelectItem value="T+3_CLOSE">T+3 Close</SelectItem>
-                    <SelectItem value="T+5_CLOSE">T+5 Close</SelectItem>
-                    <SelectItem value="T+10_CLOSE">T+10 Close</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Min Occurrences</label>
-                <input
-                  type="number"
-                  value={minOccurrences}
-                  onChange={(e) => setMinOccurrences(Number(e.target.value))}
-                  min={1}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
-                />
-              </div>
-            </div>
-          </FilterSection>
-        </div>
-
-        <div className="flex-shrink-0 p-4 border-t border-slate-100 bg-white">
-          <Button
-            onClick={() => refetch()}
-            disabled={isFetching || selectedSymbols.length === 0 || (!selectedEventName && !selectedCategory)}
-            className="w-full bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white font-semibold text-xs h-10 rounded-lg shadow-sm transition-all uppercase tracking-wide"
-          >
-            {isFetching ? (
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                Analyzing...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Play className="h-3.5 w-3.5 fill-current" />
-                Analyze Events
-              </div>
-            )}
-          </Button>
-        </div>
-
-        {/* Resize Handle */}
-        {filterOpen && (
-          <div
-            onMouseDown={handleMouseDown}
-            className={cn(
-              "absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-violet-300 transition-colors z-30",
-              isResizing && "bg-violet-400"
-            )}
-          />
-        )}
-      </aside>
-
-      {/* CENTER MAIN WORKSPACE */}
-      <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden min-w-0">
-
+    <div className="flex h-full bg-[#F8F9FB]">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* HEADER */}
         <header className="flex-shrink-0 h-14 px-6 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-3">
@@ -480,7 +243,7 @@ export default function EventsPage() {
           </div>
         </header>
 
-        <div className="p-6 space-y-5 max-w-[1600px] mx-auto w-full">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5 max-w-[1600px] mx-auto w-full">
 
           {/* STATS STRIP */}
           {stats && (
@@ -490,35 +253,35 @@ export default function EventsPage() {
                 value={stats.totalEvents?.toString() || '0'}
                 trend="neutral"
                 subValue={selectedEventName || selectedCategory || 'All Events'}
-                tooltip="The total number of times this event occurred in the selected date range. Each occurrence represents a trading opportunity based on the event."
+                metricKey="eventCount"
               />
               <StatCard
                 label="WIN RATE"
                 value={`${(stats.winRate || 0).toFixed(1)}%`}
                 trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
                 subValue={`${stats.winningEvents || 0} wins`}
-                tooltip="Percentage of event occurrences that resulted in positive returns. A win rate above 50% indicates the event tends to move the market favorably."
+                metricKey="winRate"
               />
               <StatCard
                 label="AVG RETURN"
                 value={`${(stats.avgReturn || 0).toFixed(2)}%`}
                 trend={(stats.avgReturn || 0) >= 0 ? 'up' : 'down'}
                 subValue={`Median: ${(stats.medianReturn || 0).toFixed(2)}%`}
-                tooltip="The average percentage return across all event occurrences. This shows the typical profit or loss you can expect when trading around this event."
+                metricKey="avgReturn"
               />
               <StatCard
                 label="SHARPE RATIO"
                 value={(stats.sharpeRatio || 0).toFixed(2)}
                 trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
                 subValue={(stats.sharpeRatio || 0) > 0 ? 'Good' : 'Poor'}
-                tooltip="Risk-adjusted return metric. Values above 1 are considered good, above 2 are very good. It measures how much return you get per unit of risk taken."
+                metricKey="sharpeRatio"
               />
               <StatCard
                 label="PROFIT FACTOR"
                 value={(stats.profitFactor || 0).toFixed(2)}
                 trend={(stats.profitFactor || 0) > 1 ? 'up' : 'down'}
                 subValue={`Max DD: ${(stats.maxDrawdown || 0).toFixed(2)}%`}
-                tooltip="Ratio of gross profits to gross losses. A value above 1 means total profits exceed total losses. Higher values indicate more profitable trading patterns."
+                metricKey="maxDrawdown"
               />
             </div>
           )}
@@ -610,22 +373,192 @@ export default function EventsPage() {
 
         </div>
       </div>
+
+      {/* Right Filter Console */}
+      <RightFilterConsole
+        isOpen={filterOpen}
+        onToggle={() => setFilterOpen(!filterOpen)}
+        onApply={() => refetch()}
+        isLoading={isFetching}
+        title="Event Filters"
+        subtitle="Configure Analysis"
+        primaryColor={PRIMARY_COLOR}
+      >
+        <FilterSection title="Market Context" defaultOpen delay={0.1} icon={<LayoutGrid className="h-4 w-4" />}>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Asset Class</label>
+              <div className="text-xs font-medium text-slate-700 mb-2">Symbol</div>
+              <SymbolSelector />
+            </div>
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Time Ranges" defaultOpen delay={0.15} icon={<Calendar className="h-4 w-4" />}>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+              />
+            </div>
+            <div>
+              <div className="flex justify-between mb-1.5">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Last N Days (0 to disable)</label>
+                <span className="text-[10px] font-bold text-slate-400">0</span>
+              </div>
+              <input
+                type="number"
+                value={0}
+                readOnly
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none bg-slate-50 text-slate-400"
+              />
+            </div>
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Event Selection" defaultOpen delay={0.2} icon={<Flag className="h-4 w-4" />}>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Country</label>
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger className="w-full h-9 text-xs">
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INDIA">India</SelectItem>
+                  <SelectItem value="USA">USA</SelectItem>
+                  <SelectItem value="UK">UK</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Category</label>
+              <Select value={selectedCategory || undefined} onValueChange={(val) => {
+                setSelectedCategory(val === 'ALL_CATEGORIES' ? '' : val);
+                setSelectedEventName('');
+              }}>
+                <SelectTrigger className="w-full h-9 text-xs">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL_CATEGORIES">All categories</SelectItem>
+                  {categoriesData?.map((cat: string) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Event Name</label>
+              <Select value={selectedEventName || undefined} onValueChange={(val) => {
+                setSelectedEventName(val === 'ALL_EVENTS' ? '' : val);
+              }}>
+                <SelectTrigger className="w-full h-9 text-xs">
+                  <SelectValue placeholder="Select event" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL_EVENTS">All Events</SelectItem>
+                  {eventNamesData?.map((name: string) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Analysis Parameters" defaultOpen delay={0.25} icon={<SlidersHorizontal className="h-4 w-4" />}>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Days Before Event</label>
+              <input
+                type="number"
+                value={windowBefore}
+                onChange={(e) => setWindowBefore(Number(e.target.value))}
+                min={0}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Days After Event</label>
+              <input
+                type="number"
+                value={windowAfter}
+                onChange={(e) => setWindowAfter(Number(e.target.value))}
+                min={0}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Entry Point</label>
+              <Select value={entryPoint} onValueChange={(val: 'T-1_CLOSE' | 'T0_OPEN' | 'T0_CLOSE') => setEntryPoint(val)}>
+                <SelectTrigger className="w-full h-9 text-xs">
+                  <SelectValue placeholder="Select entry" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="T-1_CLOSE">T-1 Close</SelectItem>
+                  <SelectItem value="T0_OPEN">T0 Open</SelectItem>
+                  <SelectItem value="T0_CLOSE">T0 Close</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Exit Point</label>
+              <Select value={exitPoint} onValueChange={setExitPoint}>
+                <SelectTrigger className="w-full h-9 text-xs">
+                  <SelectValue placeholder="Select exit" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="T+1_CLOSE">T+1 Close</SelectItem>
+                  <SelectItem value="T+2_CLOSE">T+2 Close</SelectItem>
+                  <SelectItem value="T+3_CLOSE">T+3 Close</SelectItem>
+                  <SelectItem value="T+5_CLOSE">T+5 Close</SelectItem>
+                  <SelectItem value="T+10_CLOSE">T+10 Close</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Min Occurrences</label>
+              <input
+                type="number"
+                value={minOccurrences}
+                onChange={(e) => setMinOccurrences(Number(e.target.value))}
+                min={1}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+              />
+            </div>
+          </div>
+        </FilterSection>
+      </RightFilterConsole>
     </div>
   );
 }
 
-function StatCard({ label, value, subValue, trend, tooltip }: {
+function StatCard({ label, value, subValue, trend, metricKey }: {
   label: string;
   value: string;
   subValue?: string;
   trend?: 'up' | 'down' | 'neutral';
-  tooltip?: string;
+  metricKey?: string;
 }) {
   return (
     <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
       <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center">
         {label}
-        {tooltip && <InfoTooltip content={tooltip} />}
+        {metricKey && <MetricTooltip metric={metricKey} />}
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
@@ -645,43 +578,6 @@ function StatCard({ label, value, subValue, trend, tooltip }: {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function FilterSection({ title, children, defaultOpen = false }: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2.5 bg-slate-50/50 hover:bg-slate-100/50 flex items-center justify-between transition-colors outline-none"
-      >
-        <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">{title}</span>
-        <ChevronDown className={cn(
-          "h-3 w-3 text-slate-400 transition-transform duration-200",
-          isOpen && "rotate-180"
-        )} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="p-3 bg-white border-t border-slate-100">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

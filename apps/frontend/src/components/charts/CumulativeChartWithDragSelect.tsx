@@ -321,6 +321,7 @@ export function CumulativeChartWithDragSelect({
           chartRef={chartRef}
           selection={selection}
           containerRef={chartContainerRef}
+          color={chartColor}
         />
 
         {/* Regular tooltip (only show when not selecting) */}

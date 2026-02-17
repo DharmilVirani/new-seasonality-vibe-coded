@@ -14,10 +14,11 @@ import { createChart, ColorType } from 'lightweight-charts';
 import { analysisApi } from '@/lib/api';
 import { useAnalysisStore } from '@/store/analysisStore';
 import { useChartSelectionStore } from '@/store/chartSelectionStore';
-import { CumulativeChartWithDragSelect } from '@/components/charts';
+import { CumulativeChartWithDragSelect, ReturnBarChart } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { AreaChart, Area, XAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 import { 
   SymbolSelector, 
@@ -26,6 +27,8 @@ import {
   MonthFilters,
   OutlierFilters
 } from '@/components/filters';
+import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
@@ -33,45 +36,17 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   </div>
 );
 
+const PRIMARY_COLOR = '#8b5cf6';
+
 export default function MonthlyPage() {
   const { selectedSymbols, startDate, endDate, filters, chartScale } = useAnalysisStore();
   const { timeRangeSelection, clearTimeRangeSelection } = useChartSelectionStore();
   const [monthType, setMonthType] = useState<'calendar' | 'expiry'>('calendar');
   const [activeTab, setActiveTab] = useState('chart');
-  const [chartMode, setChartMode] = useState<'cumulative' | 'superimposed' | 'yearly-overlay' | 'aggregate'>('cumulative');
+  const [chartMode, setChartMode] = useState<'cumulative' | 'yearly-overlay' | 'aggregate'>('cumulative');
   const [aggregateType, setAggregateType] = useState<'total' | 'avg' | 'max' | 'min'>('total');
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterWidth, setFilterWidth] = useState(280);
-  const [isResizing, setIsResizing] = useState(false);
   const chartRef = React.useRef<HTMLDivElement>(null);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX - 64;
-    if (newWidth >= 200 && newWidth <= 500) {
-      setFilterWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['monthly-analysis', selectedSymbols, startDate, endDate, filters, monthType, timeRangeSelection.startDate, timeRangeSelection.endDate],
@@ -137,121 +112,12 @@ export default function MonthlyPage() {
   };
 
   return (
-    <div className="flex h-full bg-slate-50" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
-      {/* LEFT SIDEBAR - FILTER CONSOLE */}
-      <aside 
-        style={{ 
-          width: filterOpen ? filterWidth : 0,
-          transition: isResizing ? 'none' : 'width 0.3s ease-out'
-        }}
-        className="bg-white border-r border-slate-200 flex flex-col overflow-hidden relative"
-      >
-        <div className="flex-shrink-0 h-14 border-b border-slate-100 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-purple-600" />
-            <h2 className="font-bold text-sm text-slate-700 uppercase tracking-wider">Filter Console</h2>
-          </div>
-          <button 
-            onClick={() => setFilterOpen(false)}
-            className="p-1 hover:bg-slate-100 rounded"
-          >
-            <ChevronLeft className="h-4 w-4 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Market Context */}
-          <FilterSection title="Market Context" defaultOpen>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
-                <SymbolSelector />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1 block">Month Type</label>
-                <Select value={monthType} onValueChange={(v) => setMonthType(v as 'calendar' | 'expiry')}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white shadow-lg">
-                    <SelectItem value="calendar">Calendar Month</SelectItem>
-                    <SelectItem value="expiry">Expiry Month</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </FilterSection>
-
-          {/* Time Ranges */}
-          <FilterSection title="Time Ranges" defaultOpen>
-            <div className="space-y-3">
-              <DateRangePicker />
-            </div>
-          </FilterSection>
-
-          {/* Temporal Filters */}
-          <FilterSection title="Year Filters">
-            <YearFilters />
-          </FilterSection>
-
-          <FilterSection title="Month Filters">
-            <MonthFilters />
-          </FilterSection>
-
-          {/* Risk Management */}
-          <FilterSection title="Risk Management">
-            <OutlierFilters />
-          </FilterSection>
-        </div>
-
-        {/* Apply Filters Button */}
-        <div className="flex-shrink-0 p-3 border-t border-slate-100">
-          <Button 
-            onClick={() => refetch()} 
-            disabled={isFetching || selectedSymbols.length === 0}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg"
-          >
-            {isFetching ? (
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Computing...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Play className="h-4 w-4 fill-current" />
-                APPLY FILTERS
-              </div>
-            )}
-          </Button>
-        </div>
-
-        {/* RESIZE HANDLE */}
-        {filterOpen && (
-          <div
-            onMouseDown={handleMouseDown}
-            className={cn(
-              "absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-purple-400 transition-colors group",
-              isResizing && "bg-purple-500"
-            )}
-          >
-            <div className="absolute right-0 top-0 bottom-0 w-4 -mr-2" />
-          </div>
-        )}
-      </aside>
-
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+    <div className="flex h-full bg-slate-50">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
         {/* TOP HEADER */}
         <header className="flex-shrink-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            {!filterOpen && (
-              <button 
-                onClick={() => setFilterOpen(true)}
-                className="p-2 hover:bg-slate-100 rounded"
-              >
-                <ChevronRight className="h-5 w-5 text-slate-400" />
-              </button>
-            )}
             <div className="flex items-center gap-3">
               <Activity className="h-6 w-6 text-purple-600" />
               <div>
@@ -326,18 +192,21 @@ export default function MonthlyPage() {
                 value={`${(stats.cagr || 0).toFixed(2)}%`}
                 subtitle={`Avg: ${(stats.avgReturnAll || 0).toFixed(2)}%`}
                 trend={(stats.cagr || 0) >= 0 ? 'up' : 'down'}
+                metricKey="cagr"
               />
               <StatCard
                 label="WIN RATE"
                 value={`${(stats.winRate || 0).toFixed(1)}%`}
                 subtitle="Hist. Avg"
                 trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
+                metricKey="winRate"
               />
               <StatCard
                 label="MAX DRAWDOWN"
                 value={`${(stats.maxDrawdown || 0).toFixed(2)}%`}
                 subtitle={`Max Gain: ${(stats.maxGain || 0).toFixed(2)}%`}
                 trend="down"
+                metricKey="maxDrawdown"
               />
               <StatCard
                 label="SHARPE RATIO"
@@ -348,210 +217,253 @@ export default function MonthlyPage() {
                   stats.sharpeRatio > 0 ? 'Fair' : 'Poor'
                 }
                 trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
+                metricKey="sharpeRatio"
               />
             </div>
           </div>
         )}
 
         {/* CHART AREA */}
-        <div className={cn("flex-1 p-4", activeTab === 'data' ? 'overflow-visible' : 'overflow-hidden')}>
-          <div className="h-full bg-white rounded-lg border border-slate-200 flex flex-col">
-            {/* Chart Header */}
-            <div className="flex-shrink-0 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-700">
-                {chartMode === 'cumulative' ? 'Cumulative Returns' : 
-                 chartMode === 'superimposed' ? 'Superimposed Pattern' : 
-                 chartMode === 'aggregate' ? `Aggregate (${aggregateType.toUpperCase()})` :
-                 'Yearly Overlay Pattern'}
-              </h3>
-              <div className="flex items-center gap-2">
-                {/* Chart Mode Toggle */}
-                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setChartMode('cumulative')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'cumulative' 
-                        ? "bg-white text-purple-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Cumulative
-                  </button>
-                  <button
-                    onClick={() => setChartMode('superimposed')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'superimposed' 
-                        ? "bg-white text-purple-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Superimposed
-                  </button>
-                  <button
-                    onClick={() => setChartMode('yearly-overlay')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'yearly-overlay' 
-                        ? "bg-white text-purple-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Yearly Overlay
-                  </button>
-                  <button
-                    onClick={() => setChartMode('aggregate')}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                      chartMode === 'aggregate' 
-                        ? "bg-white text-purple-600 shadow-sm" 
-                        : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Aggregate
-                  </button>
+        <div className="flex-1 p-4 overflow-y-auto">
+          <div className="space-y-4 max-w-[1800px] mx-auto">
+            {/* Chart Mode Selector */}
+            <div className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 p-1 w-fit">
+              {[
+                { id: 'cumulative', label: 'Cumulative' },
+                { id: 'yearly-overlay', label: 'Yearly' },
+                { id: 'aggregate', label: 'Aggregate' },
+              ].map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => setChartMode(mode.id as any)}
+                  className={cn(
+                    "px-4 py-2 text-xs font-medium rounded-md transition-colors",
+                    chartMode === mode.id
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Aggregate Controls */}
+            {chartMode === 'aggregate' && (
+              <div className="flex items-center gap-4 bg-white rounded-lg border border-slate-200 p-3 w-fit">
+                <Select value={aggregateType} onValueChange={(v) => setAggregateType(v as any)}>
+                  <SelectTrigger className="w-32 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white shadow-lg">
+                    <SelectItem value="total">Total</SelectItem>
+                    <SelectItem value="avg">Average</SelectItem>
+                    <SelectItem value="max">Maximum</SelectItem>
+                    <SelectItem value="min">Minimum</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Main Chart + Analytics Matrix */}
+            <div className="grid grid-cols-3 gap-4 h-[420px]">
+              {/* Main Chart */}
+              <div className="col-span-2 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden">
+                <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
+                  <div className="flex items-center">
+                    <h3 className="font-semibold text-slate-800 text-sm">
+                      {chartMode === 'cumulative' && 'Cumulative Returns'}
+                      {chartMode === 'yearly-overlay' && 'Yearly Overlay'}
+                      {chartMode === 'aggregate' && `${aggregateType.charAt(0).toUpperCase() + aggregateType.slice(1)} by Month`}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setActiveTab('chart')}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                        activeTab === 'chart' 
+                          ? "bg-purple-50 text-purple-600" 
+                          : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      Chart
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('table')}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                        activeTab === 'table' 
+                          ? "bg-purple-50 text-purple-600" 
+                          : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      Data
+                    </button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleSnapshot}
+                      disabled={!symbolData}
+                    >
+                      SNAPSHOT
+                    </Button>
+                  </div>
                 </div>
-                
-                {/* Aggregate Type Selector */}
-                {chartMode === 'aggregate' && (
-                  <>
-                    <div className="w-px h-6 bg-slate-200"></div>
-                    <Select value={aggregateType} onValueChange={(v) => setAggregateType(v as any)}>
-                      <SelectTrigger className="w-24 h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white shadow-lg">
-                        <SelectItem value="total">Total</SelectItem>
-                        <SelectItem value="avg">Average</SelectItem>
-                        <SelectItem value="max">Maximum</SelectItem>
-                        <SelectItem value="min">Minimum</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </>
-                )}
-                
-                <div className="w-px h-6 bg-slate-200"></div>
-                
-                <button
-                  onClick={() => setActiveTab('chart')}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                    activeTab === 'chart' 
-                      ? "bg-purple-50 text-purple-600" 
-                      : "text-slate-500 hover:text-slate-700"
+                <div className="flex-1 w-full relative p-4" ref={chartRef}>
+                  {isLoading ? (
+                    <div className="h-full flex flex-col items-center justify-center">
+                      <Loading size="lg" />
+                      <p className="mt-4 text-sm text-slate-500">Loading market data...</p>
+                    </div>
+                  ) : !symbolData ? (
+                    <div className="h-full flex flex-col items-center justify-center">
+                      <BarChart3 className="h-16 w-16 text-slate-200 mb-4" />
+                      <h3 className="text-lg font-semibold text-slate-700">System Idle</h3>
+                      <p className="text-sm text-slate-500 mt-2">Configure filters and click Apply Filters</p>
+                    </div>
+                  ) : activeTab === 'table' ? (
+                    <SeasonalDataTable data={symbolData.chartData} />
+                  ) : chartMode === 'cumulative' ? (
+                    <CumulativeChartWithDragSelect 
+                      data={symbolData.chartData} 
+                      chartScale={chartScale}
+                      onRangeSelected={(start, end) => {
+                        console.log('📊 Monthly - Range selected:', start, 'to', end);
+                      }}
+                    />
+                  ) : chartMode === 'aggregate' ? (
+                    <AggregateChart 
+                      data={symbolData.chartData}
+                      aggregateType={aggregateType}
+                    />
+                  ) : (
+                    <YearlyOverlayChart 
+                      data={symbolData.chartData}
+                      symbol={selectedSymbols[0]}
+                    />
                   )}
-                >
-                  Chart
-                </button>
-                <button
-                  onClick={() => setActiveTab('table')}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                    activeTab === 'table' 
-                      ? "bg-purple-50 text-purple-600" 
-                      : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  Data
-                </button>
-                
-                {activeTab === 'chart' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleSnapshot}
-                    disabled={!symbolData}
-                  >
-                    SNAPSHOT
-                  </Button>
-                )}
+                </div>
+              </div>
+
+              {/* Analytics Matrix */}
+              <div className="col-span-1 h-full">
+                <MonthlyAnalyticsMatrix
+                  data={symbolData?.chartData || []}
+                  stats={stats}
+                />
               </div>
             </div>
 
-            {/* Chart Content */}
-            <div className={cn("flex-1 p-4", activeTab === 'data' ? 'overflow-visible' : 'overflow-hidden')} ref={chartRef}>
-              <AnimatePresence mode="wait">
-                {isLoading ? (
-                  <motion.div 
-                    key="loading"
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }}
-                    className="h-full flex flex-col items-center justify-center"
-                  >
-                    <Loading size="lg" />
-                    <p className="mt-4 text-sm text-slate-500">Loading market data...</p>
-                  </motion.div>
-                ) : !symbolData ? (
-                  <motion.div 
-                    key="empty"
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }}
-                    className="h-full flex flex-col items-center justify-center"
-                  >
-                    <BarChart3 className="h-16 w-16 text-slate-200 mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-700">System Idle</h3>
-                    <p className="text-sm text-slate-500 mt-2">Configure filters and click Apply Filters</p>
-                  </motion.div>
+            {/* Secondary Panels - Superimposed & Pattern Returns */}
+            <div className="grid grid-cols-2 gap-4 h-[300px]">
+              {/* Superimposed Chart */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100">
+                  <h3 className="font-semibold text-slate-800 text-sm">Superimposed Pattern</h3>
+                </div>
+                <div className="flex-1 w-full p-4 relative">
+                  {symbolData ? (
+                    <SuperimposedChart 
+                      data={symbolData.chartData}
+                      symbol={selectedSymbols[0]}
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Monthly Returns */}
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100">
+                  <h3 className="font-semibold text-slate-800 text-sm">Monthly Returns</h3>
+                </div>
+                <div className="flex-1 w-full p-4 relative">
+                {symbolData?.chartData?.length > 0 ? (
+                  <ReturnBarChart
+                    data={symbolData.chartData.map((d: any) => ({ date: d.date, returnPercentage: d.returnPercentage || 0 }))}
+                    symbol={selectedSymbols[0]}
+                    config={{ title: '', height: 240 }}
+                    color="#8b5cf6"
+                  />
                 ) : (
-                  <motion.div 
-                    key="content"
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }}
-                    className="h-full"
-                  >
-                    {activeTab === 'chart' ? (
-                      chartMode === 'cumulative' ? (
-                        <CumulativeChartWithDragSelect 
-                          data={symbolData.chartData} 
-                          chartScale={chartScale}
-                          onRangeSelected={(start, end) => {
-                            console.log('📊 Monthly - Range selected:', start, 'to', end);
-                          }}
-                        />
-                      ) : chartMode === 'superimposed' ? (
-                        <SuperimposedChart 
-                          data={symbolData.chartData}
-                          symbol={selectedSymbols[0]}
-                        />
-                      ) : chartMode === 'aggregate' ? (
-                        <AggregateChart 
-                          data={symbolData.chartData}
-                          aggregateType={aggregateType}
-                        />
-                      ) : (
-                        <YearlyOverlayChart 
-                          data={symbolData.chartData}
-                          symbol={selectedSymbols[0]}
-                        />
-                      )
-                    ) : (
-                      <SeasonalDataTable data={symbolData.chartData} />
-                    )}
-                  </motion.div>
+                  <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
                 )}
-              </AnimatePresence>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Right Filter Console */}
+      <RightFilterConsole
+        isOpen={filterOpen}
+        onToggle={() => setFilterOpen(!filterOpen)}
+        onApply={() => refetch()}
+        isLoading={isFetching}
+        title="Filters"
+        subtitle="Configure Analysis"
+        primaryColor={PRIMARY_COLOR}
+      >
+        <FilterSection title="Market Context" defaultOpen delay={0}>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Asset Class</label>
+              <SymbolSelector />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Month Type</label>
+              <Select value={monthType} onValueChange={(v) => setMonthType(v as 'calendar' | 'expiry')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white shadow-lg">
+                  <SelectItem value="calendar">Calendar Month</SelectItem>
+                  <SelectItem value="expiry">Expiry Month</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Time Ranges" defaultOpen delay={0.05}>
+          <div className="space-y-3">
+            <DateRangePicker />
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Year Filters" delay={0.1}>
+          <YearFilters />
+        </FilterSection>
+
+        <FilterSection title="Month Filters" delay={0.15}>
+          <MonthFilters />
+        </FilterSection>
+
+        <FilterSection title="Risk Management" delay={0.1}>
+          <OutlierFilters />
+        </FilterSection>
+      </RightFilterConsole>
     </div>
   );
 }
 
 // Stat Card Component
-function StatCard({ label, value, subtitle, change, trend }: {
+function StatCard({ label, value, subtitle, change, trend, metricKey }: {
   label: string;
   value: string;
   subtitle?: string;
   change?: string;
   trend?: 'up' | 'down';
+  metricKey?: string;
 }) {
   return (
     <div className="bg-slate-50 rounded-lg p-3">
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 flex items-center">
         {label}
+        {metricKey && <MetricTooltip metric={metricKey} />}
       </div>
       <div className="flex items-baseline gap-2">
         <div className="text-xl font-bold text-slate-900">{value}</div>
@@ -568,44 +480,6 @@ function StatCard({ label, value, subtitle, change, trend }: {
       {subtitle && (
         <div className="text-xs text-slate-500 mt-1">{subtitle}</div>
       )}
-    </div>
-  );
-}
-
-// Filter Section Component
-function FilterSection({ title, children, defaultOpen = false }: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors"
-      >
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{title}</span>
-        <ChevronDown className={cn(
-          "h-4 w-4 text-slate-400 transition-transform",
-          isOpen && "rotate-180"
-        )} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="p-3 bg-white">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -1192,6 +1066,117 @@ function AggregateChart({ data, aggregateType }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Monthly Analytics Matrix Component
+function MonthlyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
+  const distributionData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const returns = data.map(d => d.returnPercentage || 0);
+    const min = Math.floor(Math.min(...returns));
+    const max = Math.ceil(Math.max(...returns));
+
+    const binCount = Math.min(20, Math.max(5, data.length));
+    const range = max - min || 1;
+    const binSize = range / binCount;
+
+    const bins = Array.from({ length: binCount }, (_, i) => {
+      const binStart = min + i * binSize;
+      return {
+        name: binStart.toFixed(1),
+        count: 0,
+        range: `${binStart.toFixed(1)} to ${(binStart + binSize).toFixed(1)}`
+      };
+    });
+
+    returns.forEach(r => {
+      const binIndex = Math.min(Math.floor((r - min) / binSize), binCount - 1);
+      if (binIndex >= 0 && bins[binIndex]) {
+        bins[binIndex].count++;
+      }
+    });
+
+    return bins;
+  }, [data]);
+
+  const metrics = [
+    { label: 'CAGR', value: `${(stats?.cagr || 0).toFixed(2)}%`, trend: (stats?.cagr || 0) > 0 ? 'up' : 'down', subType: 'Annual Return' },
+    { label: 'Avg Return', value: `${(stats?.avgReturnAll || 0).toFixed(2)}%`, trend: (stats?.avgReturnAll || 0) > 0 ? 'up' : 'down', subType: 'Per Month' },
+    { label: 'Total P/L', value: `${(stats?.cumulativeReturn || 0).toFixed(2)}%`, trend: (stats?.cumulativeReturn || 0) > 0 ? 'up' : 'down', subType: stats?.cumulativeReturn >= 0 ? 'Profit' : 'Loss' },
+    { label: 'Win %', value: `${(stats?.winRate || 0).toFixed(1)}%`, trend: (stats?.winRate || 0) > 50 ? 'up' : 'down', subType: `${stats?.positiveCount || 0}/${stats?.totalCount || 0}` },
+  ];
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col h-full font-sans">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Analytics Matrix</h3>
+        <span className="px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-400">
+          DISTRIBUTION
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Distribution Chart */}
+        <div className="flex-1 min-h-0 mb-4 relative">
+          {distributionData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={distributionData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorCountMonthly" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <RechartsTooltip
+                  content={(props: any) => {
+                    const { active, payload } = props;
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-slate-900 text-white text-xs p-2 rounded shadow-xl border border-slate-800">
+                          <p className="font-bold mb-1">Return: {payload[0]?.payload?.range}%</p>
+                          <p className="text-purple-300">Count: {payload[0]?.value}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <XAxis dataKey="name" hide />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#8b5cf6"
+                  strokeWidth={2}
+                  fill="url(#colorCountMonthly)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-slate-300 text-xs">No data</div>
+          )}
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {metrics.map((metric) => (
+            <div key={metric.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{metric.label}</div>
+              <div className="flex items-baseline gap-1">
+                <span className={cn(
+                  "text-lg font-bold",
+                  metric.trend === 'up' ? "text-purple-600" : metric.trend === 'down' ? "text-rose-600" : "text-slate-800"
+                )}>
+                  {metric.value}
+                </span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5">{metric.subType}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
