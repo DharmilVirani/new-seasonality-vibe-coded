@@ -94,7 +94,7 @@ function InfoTooltip({ content }: { content: string }) {
 }
 
 export default function EventsPage() {
-  const { selectedSymbols, startDate, endDate, chartScale } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, chartScale, resetFilters } = useAnalysisStore();
   const { timeRangeSelection } = useChartSelectionStore();
   const [filterOpen, setFilterOpen] = useState(true);
   const [activeTable, setActiveTable] = useState<'events' | 'categories'>('events');
@@ -412,6 +412,7 @@ export default function EventsPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Event Filters"
         subtitle="Configure Analysis"

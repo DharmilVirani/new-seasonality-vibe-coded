@@ -108,7 +108,7 @@ function PlaceholderState() {
 }
 
 export default function DailyPage() {
-  const { selectedSymbols, startDate, endDate, lastNDays, filters, chartScale } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, lastNDays, filters, chartScale, resetFilters } = useAnalysisStore();
   const { timeRangeSelection } = useChartSelectionStore();
   const [filterOpen, setFilterOpen] = useState(true);
 
@@ -492,6 +492,7 @@ export default function DailyPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"

@@ -228,7 +228,7 @@ function WeeklyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
 }
 
 export default function WeeklyPage() {
-  const { selectedSymbols, startDate, endDate, filters, chartScale, setChartScale } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, filters, chartScale, setChartScale, resetFilters } = useAnalysisStore();
   const { timeRangeSelection, clearTimeRangeSelection } = useChartSelectionStore();
   const [weekType, setWeekType] = useState<'monday' | 'expiry'>('expiry');
   const [activeChart, setActiveChart] = useState<'cumulative' | 'yearly'>('cumulative');
@@ -537,6 +537,7 @@ export default function WeeklyPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"

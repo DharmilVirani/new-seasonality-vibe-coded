@@ -1,10 +1,33 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn, formatPercentage } from '@/lib/utils';
-import { Download, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Download, TrendingUp, TrendingDown, Minus, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+// Simple black tooltip for table headers
+function HeaderTooltip({ label, formula, description }: { label: string; formula: string; description: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <span
+      className="relative inline-flex items-center gap-1 cursor-help"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {label}
+      <HelpCircle className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+      {isVisible && (
+        <div className="fixed z-[9999] bg-black text-white text-xs px-3 py-2 rounded shadow-lg pointer-events-none whitespace-nowrap">
+          <div className="font-semibold mb-1">{label}</div>
+          <div className="text-slate-300">{formula}</div>
+          <div className="text-slate-400 text-[10px] mt-1">{description}</div>
+        </div>
+      )}
+    </span>
+  );
+}
 
 interface DayOfWeekStats {
   day: string;
@@ -197,34 +220,74 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="p-3 text-left font-semibold bg-slate-50 text-slate-700 sticky left-0 z-10">
-                  Day
+                  <HeaderTooltip
+                    label="Day"
+                    formula="Day of Week"
+                    description="Trading day (Monday-Friday)"
+                  />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  Count
+                  <HeaderTooltip
+                    label="Count"
+                    formula="Total Occurrences"
+                    description="Number of times this day occurred"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Avg Return
+                  <HeaderTooltip
+                    label="Avg Return"
+                    formula="Σ(Returns) ÷ Count"
+                    description="Average return for this day"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Total Return
+                  <HeaderTooltip
+                    label="Total Return"
+                    formula="Σ(Returns)"
+                    description="Total compounded return for this day"
+                  />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  Win Rate
+                  <HeaderTooltip
+                    label="Win Rate"
+                    formula="(Positives ÷ Total) × 100"
+                    description="Percentage of profitable occurrences"
+                  />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  Pos/Neg
+                  <HeaderTooltip
+                    label="Pos/Neg"
+                    formula="Positive ÷ Negative"
+                    description="Ratio of wins to losses"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Avg Pos
+                  <HeaderTooltip
+                    label="Avg Pos"
+                    formula="Σ(Positive) ÷ Pos Count"
+                    description="Average return on winning days"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Avg Neg
+                  <HeaderTooltip
+                    label="Avg Neg"
+                    formula="Σ(Negative) ÷ Neg Count"
+                    description="Average return on losing days"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Best
+                  <HeaderTooltip
+                    label="Best"
+                    formula="Maximum Return"
+                    description="Best single day return"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Worst
+                  <HeaderTooltip
+                    label="Worst"
+                    formula="Minimum Return"
+                    description="Worst single day return"
+                  />
                 </th>
               </tr>
             </thead>

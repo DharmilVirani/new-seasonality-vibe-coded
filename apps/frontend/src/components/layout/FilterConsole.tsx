@@ -7,7 +7,8 @@ import {
   ChevronRight,
   Play,
   RefreshCw,
-  Settings2
+  Settings2,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
 interface FilterConsoleProps {
   children: React.ReactNode;
   onApply: () => void;
+  onClear?: () => void;
   isLoading?: boolean;
   isOpen: boolean;
   onToggle: () => void;
@@ -26,6 +28,7 @@ interface FilterConsoleProps {
 export function FilterConsole({
   children,
   onApply,
+  onClear,
   isLoading = false,
   isOpen,
   onToggle,
@@ -168,13 +171,24 @@ export function FilterConsole({
               <p className="text-[10px] text-slate-400 truncate">Configure analysis</p>
             </div>
           </div>
-          <button
-            onClick={handleToggle}
-            className="p-1.5 hover:bg-slate-100 rounded-md transition-colors group flex-shrink-0"
-            title="Hide filters"
-          >
-            <ChevronLeft className="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-          </button>
+          <div className="flex items-center gap-1">
+            {onClear && (
+              <button
+                onClick={onClear}
+                className="p-1.5 hover:bg-slate-100 rounded-md transition-colors group flex-shrink-0"
+                title="Clear all filters"
+              >
+                <X className="h-4 w-4 text-slate-400 group-hover:text-red-500 transition-colors" />
+              </button>
+            )}
+            <button
+              onClick={handleToggle}
+              className="p-1.5 hover:bg-slate-100 rounded-md transition-colors group flex-shrink-0"
+              title="Hide filters"
+            >
+              <ChevronLeft className="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
+          </div>
         </div>
 
         {/* Filter Content */}
@@ -192,7 +206,7 @@ export function FilterConsole({
 
         {/* Apply Button Footer */}
         <div 
-          className="flex-shrink-0 p-4 border-t border-slate-100 bg-slate-50/50"
+          className="flex-shrink-0 p-4 border-t border-slate-100 bg-slate-50/50 space-y-2"
           style={{
             opacity: isOpen ? 1 : 0,
             transition: isResizing ? 'none' : 'opacity 250ms ease 250ms',
@@ -222,6 +236,20 @@ export function FilterConsole({
               </div>
             )}
           </Button>
+          
+          {onClear && (
+            <Button
+              onClick={onClear}
+              disabled={isLoading}
+              variant="outline"
+              className="w-full py-2.5 rounded-lg border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+            >
+              <div className="flex items-center justify-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                <span>Clear Filters</span>
+              </div>
+            </Button>
+          )}
         </div>
 
         {/* Resize Handle */}

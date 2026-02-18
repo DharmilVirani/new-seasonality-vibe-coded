@@ -1,8 +1,29 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
+import { HelpCircle } from 'lucide-react';
+
+// Simple black tooltip component
+function SimpleTooltip({ content, children }: { content: React.ReactNode; children: React.ReactNode }) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  return (
+    <span 
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {children}
+      {isVisible && (
+        <div className="fixed z-[9999] bg-black text-white text-xs px-3 py-2 rounded shadow-lg pointer-events-none whitespace-nowrap">
+          {content}
+        </div>
+      )}
+    </span>
+  );
+}
 
 interface AnalyticsMatrixProps {
     data: any[]; // eventOccurrences
@@ -59,10 +80,58 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
     }, [data]);
 
     const metrics = [
-        { label: 'Annualized Return', value: `${annualizedReturn.toFixed(1)}%`, trend: annualizedReturn > 0 ? 'up' : 'down', subType: 'CAGR' },
-        { label: 'Average Return', value: `${(stats?.avgReturn || 0).toFixed(2)}%`, trend: (stats?.avgReturn || 0) > 0 ? 'up' : 'down', subType: 'Per Trade' },
-        { label: 'Total Profit', value: `₹${totalProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, trend: totalProfit > 0 ? 'up' : 'down', subType: `on ₹${((10000 * parseInt(process.env.NEXT_PUBLIC_INR_RATE || '83', 10)) / 100000).toFixed(1)}L` },
-        { label: 'Win %', value: `${(stats?.winRate || 0).toFixed(1)}%`, trend: (stats?.winRate || 0) > 50 ? 'up' : 'down', subType: `${stats?.winningEvents || 0}/${stats?.totalEvents || 0}` },
+        { 
+            label: 'Annualized Return', 
+            value: `${annualizedReturn.toFixed(1)}%`, 
+            trend: annualizedReturn > 0 ? 'up' : 'down', 
+            subType: 'CAGR',
+            tooltip: (
+                <div>
+                    <div className="font-semibold mb-1">Annualized Return (CAGR)</div>
+                    <div className="text-slate-300">Formula: (End Value/Start Value)^(1/years) - 1</div>
+                    <div className="text-slate-400 text-[10px] mt-1">Compounded annual growth rate over the period</div>
+                </div>
+            )
+        },
+        { 
+            label: 'Average Return', 
+            value: `${(stats?.avgReturn || 0).toFixed(2)}%`, 
+            trend: (stats?.avgReturn || 0) > 0 ? 'up' : 'down', 
+            subType: 'Per Trade',
+            tooltip: (
+                <div>
+                    <div className="font-semibold mb-1">Average Return</div>
+                    <div className="text-slate-300">Formula: Σ(Returns) ÷ Count</div>
+                    <div className="text-slate-400 text-[10px] mt-1">Mean return across all periods</div>
+                </div>
+            )
+        },
+        { 
+            label: 'Total Profit', 
+            value: `₹${totalProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, 
+            trend: totalProfit > 0 ? 'up' : 'down', 
+            subType: `on ₹${((10000 * parseInt(process.env.NEXT_PUBLIC_INR_RATE || '83', 10)) / 100000).toFixed(1)}L`,
+            tooltip: (
+                <div>
+                    <div className="font-semibold mb-1">Total Profit</div>
+                    <div className="text-slate-300">Formula: Investment × (Total Return %)</div>
+                    <div className="text-slate-400 text-[10px] mt-1">Absolute profit on ₹10L investment</div>
+                </div>
+            )
+        },
+        { 
+            label: 'Win %', 
+            value: `${(stats?.winRate || 0).toFixed(1)}%`, 
+            trend: (stats?.winRate || 0) > 50 ? 'up' : 'down', 
+            subType: `${stats?.winningEvents || 0}/${stats?.totalEvents || 0}`,
+            tooltip: (
+                <div>
+                    <div className="font-semibold mb-1">Win Rate</div>
+                    <div className="text-slate-300">Formula: (Winning Trades ÷ Total Trades) × 100</div>
+                    <div className="text-slate-400 text-[10px] mt-1">Percentage of profitable periods</div>
+                </div>
+            )
+        },
     ];
 
     return (
@@ -118,7 +187,14 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
                 <div className="grid grid-cols-2 gap-3">
                     {metrics.map((m, i) => (
                         <div key={i} className="bg-slate-50/80 rounded-lg p-3 border border-slate-100/50 hover:bg-slate-50 transition-colors">
-                            <div className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-wider">{m.label}</div>
+                            <div className="text-[9px] font-bold text-slate-400 uppercase mb-1 tracking-wider">
+                                <SimpleTooltip content={m.tooltip}>
+                                    <span className="inline-flex items-center gap-1 cursor-help">
+                                        {m.label}
+                                        <HelpCircle className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+                                    </span>
+                                </SimpleTooltip>
+                            </div>
                             <div className="flex items-end justify-between">
                                 <div className="text-base font-bold text-slate-800 tracking-tight">{m.value}</div>
                                 <div className={cn(

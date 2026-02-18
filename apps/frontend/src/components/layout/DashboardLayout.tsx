@@ -31,7 +31,7 @@ const navigationGroups = [
   {
     title: 'Analysis',
     items: [
-      { icon: Calendar, label: 'Daily', href: '/dashboard/daily', color: '#3b82f6' },
+      { icon: Calendar, label: 'Daily', href: '/dashboard/daily', color: '#10b981' },
       { icon: CalendarDays, label: 'Weekly', href: '/dashboard/weekly', color: '#f59e0b' },
       { icon: CalendarRange, label: 'Monthly', href: '/dashboard/monthly', color: '#8b5cf6' },
       { icon: Layers, label: 'Yearly', href: '/dashboard/yearly', color: '#f97316' },

@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 interface RightFilterConsoleProps {
   children: React.ReactNode;
   onApply: () => void;
+  onClear?: () => void;
   isLoading?: boolean;
   isOpen: boolean;
   onToggle: () => void;
@@ -25,6 +26,7 @@ interface RightFilterConsoleProps {
 export function RightFilterConsole({
   children,
   onApply,
+  onClear,
   isLoading = false,
   isOpen,
   onToggle,
@@ -166,13 +168,24 @@ export function RightFilterConsole({
             </div>
           </div>
           
-          <button
-            onClick={handleToggle}
-            className="p-2 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
-            title="Hide filters"
-          >
-            <X className="h-4 w-4 text-slate-400 hover:text-slate-600 transition-colors" />
-          </button>
+          <div className="flex items-center gap-1">
+            {onClear && (
+              <button
+                onClick={onClear}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
+                title="Clear all filters"
+              >
+                <RefreshCw className="h-4 w-4 text-slate-400 hover:text-red-500 transition-colors" />
+              </button>
+            )}
+            <button
+              onClick={handleToggle}
+              className="p-2 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
+              title="Hide filters"
+            >
+              <X className="h-4 w-4 text-slate-400 hover:text-slate-600 transition-colors" />
+            </button>
+          </div>
         </div>
 
         {/* Filter Content - Fade in after sidebar opens */}
@@ -190,7 +203,7 @@ export function RightFilterConsole({
 
         {/* Apply Button Footer */}
         <div 
-          className="flex-shrink-0 p-5 border-t border-slate-100 bg-gradient-to-t from-slate-50/80 to-white"
+          className="flex-shrink-0 p-5 border-t border-slate-100 bg-gradient-to-t from-slate-50/80 to-white space-y-2"
           style={{
             opacity: isOpen ? 1 : 0,
             transition: isResizing ? 'none' : 'opacity 250ms ease 250ms',
@@ -218,6 +231,19 @@ export function RightFilterConsole({
               )}
             </div>
           </button>
+          
+          {onClear && (
+            <button
+              onClick={onClear}
+              disabled={isLoading}
+              className="w-full rounded-xl font-medium py-3 px-4 border border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <div className="flex items-center justify-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                <span className="text-sm">Clear Filters</span>
+              </div>
+            </button>
+          )}
         </div>
 
         {/* Resize Handle */}

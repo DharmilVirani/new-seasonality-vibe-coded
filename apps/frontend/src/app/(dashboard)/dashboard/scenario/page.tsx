@@ -42,7 +42,7 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
 );
 
 export default function ScenarioPage() {
-  const { selectedSymbols, startDate, endDate, filters, chartScale } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, filters, chartScale, resetFilters } = useAnalysisStore();
   const [activeSection, setActiveSection] = useState<'historic' | 'streak' | 'momentum' | 'watchlist'>('historic');
   const [filterOpen, setFilterOpen] = useState(true);
 
@@ -227,6 +227,7 @@ export default function ScenarioPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Scenario Filters"
         subtitle="Configure Analysis"

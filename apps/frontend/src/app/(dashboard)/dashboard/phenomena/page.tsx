@@ -18,7 +18,7 @@ import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilt
 const PRIMARY_COLOR = '#14b8a6';
 
 export default function PhenomenaPage() {
-  const { selectedSymbols, startDate, endDate } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, resetFilters } = useAnalysisStore();
   const [filterOpen, setFilterOpen] = useState(true);
   const [phenomenaType, setPhenomenaType] = useState<'consecutive' | 'reversal' | 'breakout'>('consecutive');
   const [threshold, setThreshold] = useState(3);
@@ -136,6 +136,7 @@ export default function PhenomenaPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Detection"

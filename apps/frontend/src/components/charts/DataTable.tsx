@@ -4,8 +4,30 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn, formatDate, formatPercentage } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { MetricTooltip } from '@/components/ui/MetricTooltip';
+import { ChevronLeft, ChevronRight, Download, HelpCircle } from 'lucide-react';
+
+// Simple black tooltip for table headers
+function HeaderTooltip({ label, formula, description }: { label: string; formula: string; description: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  return (
+    <span 
+      className="relative inline-flex items-center gap-1 cursor-help"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {label}
+      <HelpCircle className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+      {isVisible && (
+        <div className="fixed z-[9999] bg-black text-white text-xs px-3 py-2 rounded shadow-lg pointer-events-none whitespace-nowrap">
+          <div className="font-semibold mb-1">{label}</div>
+          <div className="text-slate-300">{formula}</div>
+          <div className="text-slate-400 text-[10px] mt-1">{description}</div>
+        </div>
+      )}
+    </span>
+  );
+}
 
 interface DataTableProps {
   data: Array<{
@@ -88,20 +110,46 @@ export function DataTable({ data, title = 'Data Table', pageSize = 20 }: DataTab
             <thead>
               <tr>
                 <th className="text-left">
-                  <span className="inline-flex items-center">
-                    Date
-                    <MetricTooltip metric="year" />
-                  </span>
+                  <HeaderTooltip 
+                    label="Date" 
+                    formula="Trading Date" 
+                    description="The date of the trading session"
+                  />
                 </th>
-                <th className="text-right">Open</th>
-                <th className="text-right">High</th>
-                <th className="text-right">Low</th>
-                <th className="text-right">Close</th>
                 <th className="text-right">
-                  <span className="inline-flex items-center">
-                    Return %
-                    <MetricTooltip metric="returnPercentage" />
-                  </span>
+                  <HeaderTooltip 
+                    label="Open" 
+                    formula="Opening Price" 
+                    description="Price at market open"
+                  />
+                </th>
+                <th className="text-right">
+                  <HeaderTooltip 
+                    label="High" 
+                    formula="Highest Price" 
+                    description="Maximum price reached during the day"
+                  />
+                </th>
+                <th className="text-right">
+                  <HeaderTooltip 
+                    label="Low" 
+                    formula="Lowest Price" 
+                    description="Minimum price reached during the day"
+                  />
+                </th>
+                <th className="text-right">
+                  <HeaderTooltip 
+                    label="Close" 
+                    formula="Closing Price" 
+                    description="Price at market close"
+                  />
+                </th>
+                <th className="text-right">
+                  <HeaderTooltip 
+                    label="Return %" 
+                    formula="(Close - Prev Close) ÷ Prev Close × 100" 
+                    description="Percentage change from previous close"
+                  />
                 </th>
               </tr>
             </thead>

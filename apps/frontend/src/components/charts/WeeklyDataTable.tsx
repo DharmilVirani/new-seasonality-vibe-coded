@@ -3,8 +3,31 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download } from 'lucide-react';
+import { Download, HelpCircle } from 'lucide-react';
 import { cn, formatPercentage } from '@/lib/utils';
+
+// Simple black tooltip for table headers
+function HeaderTooltip({ label, formula, description }: { label: string; formula: string; description: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  return (
+    <span 
+      className="relative inline-flex items-center gap-1 cursor-help"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {label}
+      <HelpCircle className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+      {isVisible && (
+        <div className="fixed z-[9999] bg-black text-white text-xs px-3 py-2 rounded shadow-lg pointer-events-none whitespace-nowrap">
+          <div className="font-semibold mb-1">{label}</div>
+          <div className="text-slate-300">{formula}</div>
+          <div className="text-slate-400 text-[10px] mt-1">{description}</div>
+        </div>
+      )}
+    </span>
+  );
+}
 
 interface WeeklyStatistics {
   week: number;
@@ -210,34 +233,74 @@ export function WeeklyDataTable({
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="p-3 text-left font-semibold bg-slate-50 text-slate-700 sticky left-0 z-10">
-                  Week
+                  <HeaderTooltip 
+                    label="Week" 
+                    formula="Week Number" 
+                    description="Trading week of the year (1-52) or month (1-5)"
+                  />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  All Count
+                  <HeaderTooltip 
+                    label="All Count" 
+                    formula="Total Occurrences" 
+                    description="Number of times this week occurred in the data"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Avg Return All
+                  <HeaderTooltip 
+                    label="Avg Return All" 
+                    formula="Σ(Returns) ÷ Count" 
+                    description="Average return across all occurrences"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Sum Return All
+                  <HeaderTooltip 
+                    label="Sum Return All" 
+                    formula="Σ(Returns)" 
+                    description="Total compounded return for all occurrences"
+                  />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  Pos Count
+                  <HeaderTooltip 
+                    label="Pos Count" 
+                    formula="Count of Positive Returns" 
+                    description="Number of profitable occurrences"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Avg Return Pos
+                  <HeaderTooltip 
+                    label="Avg Return Pos" 
+                    formula="Σ(Positive Returns) ÷ Pos Count" 
+                    description="Average return of only profitable periods"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Sum Return Pos
+                  <HeaderTooltip 
+                    label="Sum Return Pos" 
+                    formula="Σ(Positive Returns)" 
+                    description="Total return from profitable periods only"
+                  />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  Neg Count
+                  <HeaderTooltip 
+                    label="Neg Count" 
+                    formula="Count of Negative Returns" 
+                    description="Number of losing occurrences"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Avg Return Neg
+                  <HeaderTooltip 
+                    label="Avg Return Neg" 
+                    formula="Σ(Negative Returns) ÷ Neg Count" 
+                    description="Average return of only losing periods"
+                  />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  Sum Return Neg
+                  <HeaderTooltip 
+                    label="Sum Return Neg" 
+                    formula="Σ(Negative Returns)" 
+                    description="Total return from losing periods only"
+                  />
                 </th>
               </tr>
             </thead>

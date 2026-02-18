@@ -18,7 +18,7 @@ import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilt
 const PRIMARY_COLOR = '#06b6d4';
 
 export default function ScannerPage() {
-  const { startDate, endDate, filters } = useAnalysisStore();
+  const { startDate, endDate, filters, resetFilters } = useAnalysisStore();
   const [filterOpen, setFilterOpen] = useState(true);
   const [trendType, setTrendType] = useState<'Bullish' | 'Bearish'>('Bullish');
   const [consecutiveDays, setConsecutiveDays] = useState(3);
@@ -126,6 +126,7 @@ export default function ScannerPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"

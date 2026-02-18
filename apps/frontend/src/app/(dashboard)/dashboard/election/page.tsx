@@ -33,7 +33,7 @@ const electionTypes = [
 ];
 
 export default function ElectionPage() {
-  const { selectedSymbols, startDate, endDate, filters } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, filters, resetFilters } = useAnalysisStore();
   const [filterOpen, setFilterOpen] = useState(true);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -158,6 +158,7 @@ export default function ElectionPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Election Filters"
         subtitle="Configure Analysis"

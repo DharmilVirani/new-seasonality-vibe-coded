@@ -17,7 +17,7 @@ import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilt
 const PRIMARY_COLOR = '#6366f1';
 
 export default function BasketPage() {
-  const { startDate, endDate } = useAnalysisStore();
+  const { startDate, endDate, resetFilters } = useAnalysisStore();
   const [filterOpen, setFilterOpen] = useState(true);
   const [basketSymbols, setBasketSymbols] = useState<string[]>(['NIFTY', 'BANKNIFTY']);
 
@@ -174,6 +174,7 @@ export default function BasketPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Basket"

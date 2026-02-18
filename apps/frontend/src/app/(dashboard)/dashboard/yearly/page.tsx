@@ -37,7 +37,7 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
 const PRIMARY_COLOR = '#f97316';
 
 export default function YearlyPage() {
-  const { selectedSymbols, startDate, endDate, filters, chartScale } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, filters, chartScale, resetFilters } = useAnalysisStore();
   const { timeRangeSelection, clearTimeRangeSelection } = useChartSelectionStore();
   const [yearType, setYearType] = useState<'calendar' | 'expiry'>('calendar');
   const [activeTab, setActiveTab] = useState('chart');
@@ -338,6 +338,7 @@ export default function YearlyPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"

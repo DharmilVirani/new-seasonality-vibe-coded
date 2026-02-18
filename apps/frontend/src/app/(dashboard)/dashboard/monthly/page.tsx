@@ -39,7 +39,7 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
 const PRIMARY_COLOR = '#8b5cf6';
 
 export default function MonthlyPage() {
-  const { selectedSymbols, startDate, endDate, filters, chartScale } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, filters, chartScale, resetFilters } = useAnalysisStore();
   const { timeRangeSelection, clearTimeRangeSelection } = useChartSelectionStore();
   const [monthType, setMonthType] = useState<'calendar' | 'expiry'>('calendar');
   const [activeTab, setActiveTab] = useState('chart');
@@ -402,6 +402,7 @@ export default function MonthlyPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"

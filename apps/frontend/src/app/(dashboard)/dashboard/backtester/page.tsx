@@ -17,7 +17,7 @@ import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilt
 const PRIMARY_COLOR = '#ec4899';
 
 export default function BacktesterPage() {
-  const { selectedSymbols, startDate, endDate } = useAnalysisStore();
+  const { selectedSymbols, startDate, endDate, resetFilters } = useAnalysisStore();
   const [filterOpen, setFilterOpen] = useState(true);
   const [positionSize, setPositionSize] = useState(100);
   const [stopLoss, setStopLoss] = useState(2);
@@ -143,6 +143,7 @@ export default function BacktesterPage() {
         isOpen={filterOpen}
         onToggle={() => setFilterOpen(!filterOpen)}
         onApply={() => refetch()}
+        onClear={resetFilters}
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Backtest"
