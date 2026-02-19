@@ -22,6 +22,9 @@ interface ReturnBarChartProps {
   config?: ChartConfig;
   showCumulative?: boolean;
   color?: string;
+  compareData?: ReturnData[];
+  compareSymbol?: string;
+  compareColor?: string;
 }
 
 export function ReturnBarChart({
@@ -30,26 +33,67 @@ export function ReturnBarChart({
   config = {},
   showCumulative = false,
   color = '#7c3aed',
+  compareData,
+  compareSymbol,
+  compareColor = '#dc2626',
 }: ReturnBarChartProps) {
   // Generate lighter shade for negative bars
-  const lighterColor = color.length === 7 
+  const lighterColor = color.length === 7
     ? color + '99' // Add alpha for lighter version
     : color;
+  const lighterCompareColor = compareColor.length === 7
+    ? compareColor + '99'
+    : compareColor;
+
   const chartData = useMemo(() => {
+    // Create a map of dates to main data
+    const dataMap = new Map();
     let cumulative = 0;
-    return data.map((d) => {
+
+    data.forEach((d) => {
       cumulative += d.returnPercentage;
-      return {
-        ...d,
-        date: new Date(d.date).toLocaleDateString('en-IN', {
-          day: '2-digit',
-          month: 'short',
-        }),
+      const dateKey = new Date(d.date).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+      });
+      dataMap.set(dateKey, {
+        date: dateKey,
+        returnPercentage: d.returnPercentage,
         cumulativeReturn: cumulative,
         isPositive: d.returnPercentage >= 0,
-      };
+      });
     });
-  }, [data]);
+
+    // Add compare data if provided
+    if (compareData && compareData.length > 0) {
+      let compareCumulative = 0;
+      compareData.forEach((d) => {
+        compareCumulative += d.returnPercentage;
+        const dateKey = new Date(d.date).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+        });
+        const existing = dataMap.get(dateKey);
+        if (existing) {
+          existing.compareReturnPercentage = d.returnPercentage;
+          existing.compareCumulativeReturn = compareCumulative;
+          existing.isComparePositive = d.returnPercentage >= 0;
+        } else {
+          dataMap.set(dateKey, {
+            date: dateKey,
+            returnPercentage: null,
+            cumulativeReturn: null,
+            isPositive: null,
+            compareReturnPercentage: d.returnPercentage,
+            compareCumulativeReturn: compareCumulative,
+            isComparePositive: d.returnPercentage >= 0,
+          });
+        }
+      });
+    }
+
+    return Array.from(dataMap.values());
+  }, [data, compareData]);
 
   const chartConfig: ChartConfig = {
     title: `${symbol} - Daily Returns`,
@@ -78,13 +122,23 @@ export function ReturnBarChart({
               return (
                 <div className="bg-card border rounded-lg p-3 shadow-lg">
                   <p className="font-medium">{d.date}</p>
-                  <div className="text-sm mt-1">
-                    <span className="text-muted-foreground">Return: </span>
-                    <span style={{ color: d.isPositive ? color : lighterColor }}>
-                      {d.returnPercentage >= 0 ? '+' : ''}{d.returnPercentage?.toFixed(2)}%
-                    </span>
-                  </div>
-                  {showCumulative && (
+                  {d.returnPercentage !== null && (
+                    <div className="text-sm mt-1">
+                      <span className="text-muted-foreground">{symbol}: </span>
+                      <span style={{ color: d.isPositive ? color : lighterColor }}>
+                        {d.returnPercentage >= 0 ? '+' : ''}{d.returnPercentage?.toFixed(2)}%
+                      </span>
+                    </div>
+                  )}
+                  {d.compareReturnPercentage !== undefined && d.compareReturnPercentage !== null && compareSymbol && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">{compareSymbol}: </span>
+                      <span style={{ color: d.isComparePositive ? compareColor : lighterCompareColor }}>
+                        {d.compareReturnPercentage >= 0 ? '+' : ''}{d.compareReturnPercentage?.toFixed(2)}%
+                      </span>
+                    </div>
+                  )}
+                  {showCumulative && d.cumulativeReturn !== null && (
                     <div className="text-sm">
                       <span className="text-muted-foreground">Cumulative: </span>
                       <span style={{ color: d.cumulativeReturn >= 0 ? color : lighterColor }}>
@@ -100,7 +154,7 @@ export function ReturnBarChart({
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1} />
           <Bar
             dataKey="returnPercentage"
-            name="Daily Return %"
+            name={`${symbol} Return %`}
             radius={[2, 2, 0, 0]}
           >
             {chartData.map((entry, index) => (
@@ -110,6 +164,20 @@ export function ReturnBarChart({
               />
             ))}
           </Bar>
+          {compareData && compareData.length > 0 && (
+            <Bar
+              dataKey="compareReturnPercentage"
+              name={`${compareSymbol} Return %`}
+              radius={[2, 2, 0, 0]}
+            >
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`compare-cell-${index}`}
+                  fill={entry.isComparePositive ? compareColor : lighterCompareColor}
+                />
+              ))}
+            </Bar>
+          )}
         </BarChart>
       </ResponsiveContainer>
     </ChartWrapper>
