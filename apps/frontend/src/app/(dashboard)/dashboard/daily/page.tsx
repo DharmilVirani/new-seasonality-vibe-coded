@@ -301,23 +301,19 @@ export default function DailyPage() {
     return filterDataByDayRange(symbolData.chartData, dayRangeSelection, filters.superimposedChartType || 'CalendarYearDays');
   }, [symbolData?.chartData, dayRangeSelection, filters.superimposedChartType]);
 
-  // Prepare chart data using filtered data
+  // Prepare chart data using filtered data - recalculate cumulative from filtered subset
   const cumulativeData = useMemo(() => {
     if (!filteredChartData.length) return [];
-    return filteredChartData.map((point: any) => ({
-      date: point.date,
-      returnPercentage: point.returnPercentage || 0,
-      cumulative: point.cumulative || 0,
-    }));
-  }, [filteredChartData]);
-
-  // Pattern returns data (for bar chart) using filtered data
-  const patternReturnsData = useMemo(() => {
-    if (!filteredChartData.length) return [];
-    return filteredChartData.map((point: any) => ({
-      date: point.date,
-      returnPercentage: point.returnPercentage || 0,
-    }));
+    let cumulative = 100;
+    return filteredChartData.map((point: any) => {
+      const returnPct = point.returnPercentage || 0;
+      cumulative = cumulative * (1 + returnPct / 100);
+      return {
+        date: point.date,
+        returnPercentage: returnPct,
+        cumulative: Number(cumulative.toFixed(4)),
+      };
+    });
   }, [filteredChartData]);
 
   // Filter comparison data by day range if active
@@ -326,24 +322,132 @@ export default function DailyPage() {
     return filterDataByDayRange(compareSymbolData.chartData, dayRangeSelection, filters.superimposedChartType || 'CalendarYearDays');
   }, [compareSymbolData?.chartData, dayRangeSelection, filters.superimposedChartType]);
 
-  // Compare cumulative data
+  // Compare cumulative data - recalculate cumulative from filtered subset
   const compareCumulativeData = useMemo(() => {
     if (!filteredCompareChartData.length) return [];
-    return filteredCompareChartData.map((point: any) => ({
-      date: point.date,
-      returnPercentage: point.returnPercentage || 0,
-      cumulative: point.cumulative || 0,
-    }));
+    let cumulative = 100;
+    return filteredCompareChartData.map((point: any) => {
+      const returnPct = point.returnPercentage || 0;
+      cumulative = cumulative * (1 + returnPct / 100);
+      return {
+        date: point.date,
+        returnPercentage: returnPct,
+        cumulative: Number(cumulative.toFixed(4)),
+      };
+    });
   }, [filteredCompareChartData]);
 
-  // Compare pattern returns data
+  // Pattern Returns - shows different data based on drag selection state
+  // Default: Monthly average (Jan-Dec), With drag: Yearly pattern returns
+  const patternReturnsData = useMemo(() => {
+    const sourceData = dayRangeSelection.isActive ? filteredChartData : symbolData?.chartData || [];
+    if (!sourceData.length) return [];
+
+    if (dayRangeSelection.isActive) {
+      // With drag select: show yearly pattern returns
+      // Group by year and sum/avg the returns within the selected day range pattern
+      const yearlyGroups: Record<string, { returns: number[]; sum: number; count: number }> = {};
+      
+      sourceData.forEach((d: any) => {
+        const year = new Date(d.date).getFullYear().toString();
+        if (!yearlyGroups[year]) {
+          yearlyGroups[year] = { returns: [], sum: 0, count: 0 };
+        }
+        const ret = d.returnPercentage || 0;
+        yearlyGroups[year].returns.push(ret);
+        yearlyGroups[year].sum += ret;
+        yearlyGroups[year].count++;
+      });
+
+      return Object.entries(yearlyGroups)
+        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+        .map(([year, data]) => ({
+          date: year,
+          returnPercentage: Number((data.sum / data.count).toFixed(4)), // avg return
+          yearLabel: year,
+        }));
+    } else {
+      // Default: show monthly average returns (Jan-Dec)
+      const monthGroups: Record<number, { returns: number[]; sum: number; count: number }> = {};
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      sourceData.forEach((d: any) => {
+        const month = new Date(d.date).getMonth(); // 0-11
+        if (!monthGroups[month]) {
+          monthGroups[month] = { returns: [], sum: 0, count: 0 };
+        }
+        const ret = d.returnPercentage || 0;
+        monthGroups[month].returns.push(ret);
+        monthGroups[month].sum += ret;
+        monthGroups[month].count++;
+      });
+
+      return Array.from({ length: 12 }, (_, i) => {
+        const data = monthGroups[i];
+        const avgReturn = data ? data.sum / data.count : 0;
+        return {
+          date: `${monthNames[i]}`,
+          returnPercentage: Number(avgReturn.toFixed(4)),
+          monthLabel: monthNames[i],
+        };
+      });
+    }
+  }, [symbolData?.chartData, filteredChartData, dayRangeSelection.isActive]);
+
+  // Compare pattern returns data - same logic as main symbol
   const comparePatternReturnsData = useMemo(() => {
-    if (!filteredCompareChartData.length) return [];
-    return filteredCompareChartData.map((point: any) => ({
-      date: point.date,
-      returnPercentage: point.returnPercentage || 0,
-    }));
-  }, [filteredCompareChartData]);
+    const compareSourceData = dayRangeSelection.isActive ? filteredCompareChartData : compareSymbolData?.chartData || [];
+    if (!compareSourceData.length) return [];
+
+    if (dayRangeSelection.isActive) {
+      // With drag select: show yearly pattern returns
+      const yearlyGroups: Record<string, { returns: number[]; sum: number; count: number }> = {};
+      
+      compareSourceData.forEach((d: any) => {
+        const year = new Date(d.date).getFullYear().toString();
+        if (!yearlyGroups[year]) {
+          yearlyGroups[year] = { returns: [], sum: 0, count: 0 };
+        }
+        const ret = d.returnPercentage || 0;
+        yearlyGroups[year].returns.push(ret);
+        yearlyGroups[year].sum += ret;
+        yearlyGroups[year].count++;
+      });
+
+      return Object.entries(yearlyGroups)
+        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+        .map(([year, data]) => ({
+          date: year,
+          returnPercentage: Number((data.sum / data.count).toFixed(4)),
+          yearLabel: year,
+        }));
+    } else {
+      // Default: show monthly average returns (Jan-Dec)
+      const monthGroups: Record<number, { returns: number[]; sum: number; count: number }> = {};
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      compareSourceData.forEach((d: any) => {
+        const month = new Date(d.date).getMonth();
+        if (!monthGroups[month]) {
+          monthGroups[month] = { returns: [], sum: 0, count: 0 };
+        }
+        const ret = d.returnPercentage || 0;
+        monthGroups[month].returns.push(ret);
+        monthGroups[month].sum += ret;
+        monthGroups[month].count++;
+      });
+
+      return Array.from({ length: 12 }, (_, i) => {
+        const data = monthGroups[i];
+        const avgReturn = data ? data.sum / data.count : 0;
+        return {
+          date: `${monthNames[i]}`,
+          returnPercentage: Number(avgReturn.toFixed(4)),
+          monthLabel: monthNames[i],
+        };
+      });
+    }
+  }, [compareSymbolData?.chartData, filteredCompareChartData, dayRangeSelection.isActive]);
 
   // Aggregate data for aggregate chart mode - grouped by weekday (Mon-Fri only)
   const aggregateData = useMemo(() => {
@@ -734,8 +838,13 @@ export default function DailyPage() {
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-100">
                 <div className="flex items-center">
-                  <h3 className="font-semibold text-slate-800 text-sm">Daily Returns</h3>
-                  <InfoTooltip content="Bar chart showing each trading day's return. Green = positive, Red = negative." />
+                  <h3 className="font-semibold text-slate-800 text-sm">
+                    {dayRangeSelection.isActive ? 'Yearly Pattern Returns' : 'Avg Return By Months (%)'}
+                  </h3>
+                  <InfoTooltip content={dayRangeSelection.isActive 
+                    ? "The bars show the gains and losses generated by the selected pattern in every single year of the time period under review." 
+                    : "Average return for each calendar month across all years in the selected time period."} 
+                  />
                 </div>
               </div>
               <div className="flex-1 w-full p-4 relative">
@@ -749,6 +858,7 @@ export default function DailyPage() {
                       compareData={compareMode && comparePatternReturnsData.length > 0 ? comparePatternReturnsData : undefined}
                       compareSymbol={compareMode ? compareSymbol : undefined}
                       compareColor="#dc2626"
+                      chartLabel={dayRangeSelection.isActive ? 'year' : 'month'}
                     />
                   ) : (
                     <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
@@ -1326,7 +1436,7 @@ function CumulativeChart({
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [data, chartScale, chartColor]);
+  }, [data, compareData, chartScale, chartColor, compareColor]);
 
   return (
     <div ref={chartContainerRef} className="h-full w-full relative">

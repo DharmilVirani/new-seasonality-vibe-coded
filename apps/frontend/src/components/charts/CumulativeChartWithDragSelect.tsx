@@ -14,6 +14,8 @@ interface CumulativeChartWithDragSelectProps {
   chartScale?: 'linear' | 'log';
   onRangeSelected?: (startDate: string, endDate: string) => void;
   chartColor?: string;
+  compareData?: any[];
+  compareColor?: string;
 }
 
 export function CumulativeChartWithDragSelect({
@@ -21,6 +23,8 @@ export function CumulativeChartWithDragSelect({
   chartScale = 'linear',
   onRangeSelected,
   chartColor = '#10b981',
+  compareData,
+  compareColor = '#dc2626',
 }: CumulativeChartWithDragSelectProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -32,6 +36,7 @@ export function CumulativeChartWithDragSelect({
     y: number;
     date: string;
     value: number;
+    compareValue?: number | null;
   } | null>(null);
 
   const { timeRangeSelection, setTimeRangeSelection, clearTimeRangeSelection } = 
@@ -146,6 +151,22 @@ export function CumulativeChartWithDragSelect({
 
     seriesRef.current = areaSeries;
     areaSeries.setData(chartData);
+
+    // Add comparison series if provided
+    if (compareData && compareData.length > 0) {
+      const compareChartData = compareData.map((d: any) => ({
+        time: Math.floor(new Date(d.date).getTime() / 1000) as any,
+        value: d.cumulative || 0,
+      }));
+
+      const compareSeries = chart.addLineSeries({
+        color: compareColor,
+        lineWidth: 2,
+        title: 'Compare',
+      });
+      compareSeries.setData(compareChartData);
+    }
+
     chart.timeScale().fitContent();
 
     // For event data, customize time scale to show relative days
@@ -178,6 +199,16 @@ export function CumulativeChartWithDragSelect({
         const dataPoint = seriesData.get(firstSeries);
         const cumulativeValue = dataPoint?.value ?? 0;
         
+        // Get compare value if available
+        let compareValue: number | null = null;
+        if (compareData && compareData.length > 0) {
+          const compareSeriesKey = seriesData.keys().next().value;
+          if (compareSeriesKey) {
+            const compareDataPoint = seriesData.get(compareSeriesKey);
+            compareValue = compareDataPoint?.value ?? null;
+          }
+        }
+        
         const chartDataPoint = chartData[param.time];
         const dateStr = isEventData
           ? chartDataPoint?.originalDate || `Day ${param.time}`
@@ -193,6 +224,7 @@ export function CumulativeChartWithDragSelect({
           y: param.point.y,
           date: dateStr,
           value: cumulativeValue,
+          compareValue,
         });
       }
     });
@@ -337,6 +369,11 @@ export function CumulativeChartWithDragSelect({
             <div className={`font-bold`} style={{ color: chartColor }}>
               Cumulative: {tooltip.value.toFixed(2)}%
             </div>
+            {tooltip.compareValue !== null && tooltip.compareValue !== undefined && (
+              <div className={`font-bold`} style={{ color: compareColor }}>
+                Compare: {tooltip.compareValue.toFixed(2)}%
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -25,6 +25,7 @@ interface ReturnBarChartProps {
   compareData?: ReturnData[];
   compareSymbol?: string;
   compareColor?: string;
+  chartLabel?: 'month' | 'year' | 'day' | 'week';
 }
 
 export function ReturnBarChart({
@@ -36,6 +37,7 @@ export function ReturnBarChart({
   compareData,
   compareSymbol,
   compareColor = '#dc2626',
+  chartLabel = 'day',
 }: ReturnBarChartProps) {
   // Generate lighter shade for negative bars
   const lighterColor = color.length === 7
@@ -46,16 +48,29 @@ export function ReturnBarChart({
     : compareColor;
 
   const chartData = useMemo(() => {
-    // Create a map of dates to main data
+    // For month/year view, data already has the label in date field
+    // For day view, format as date string
     const dataMap = new Map();
     let cumulative = 0;
 
     data.forEach((d) => {
       cumulative += d.returnPercentage;
-      const dateKey = new Date(d.date).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-      });
+      let dateKey: string;
+      
+      if (chartLabel === 'month') {
+        dateKey = String(d.date); // Already formatted as "Jan", "Feb", etc.
+      } else if (chartLabel === 'year') {
+        dateKey = String(d.date); // Already formatted as year "2010", "2011", etc.
+      } else if (chartLabel === 'week') {
+        dateKey = String(d.date); // Already formatted as "W1", "W2", etc.
+      } else {
+        // Daily view - format date
+        dateKey = new Date(d.date).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+        });
+      }
+      
       dataMap.set(dateKey, {
         date: dateKey,
         returnPercentage: d.returnPercentage,
@@ -69,10 +84,20 @@ export function ReturnBarChart({
       let compareCumulative = 0;
       compareData.forEach((d) => {
         compareCumulative += d.returnPercentage;
-        const dateKey = new Date(d.date).toLocaleDateString('en-IN', {
-          day: '2-digit',
-          month: 'short',
-        });
+        let dateKey: string;
+        
+        if (chartLabel === 'month') {
+          dateKey = String(d.date);
+        } else if (chartLabel === 'year') {
+          dateKey = String(d.date);
+        } else if (chartLabel === 'week') {
+          dateKey = String(d.date);
+        } else {
+          dateKey = new Date(d.date).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+          });
+        }
         const existing = dataMap.get(dateKey);
         if (existing) {
           existing.compareReturnPercentage = d.returnPercentage;
@@ -93,10 +118,14 @@ export function ReturnBarChart({
     }
 
     return Array.from(dataMap.values());
-  }, [data, compareData]);
+  }, [data, compareData, chartLabel]);
 
   const chartConfig: ChartConfig = {
-    title: `${symbol} - Daily Returns`,
+    title: chartLabel === 'month' 
+      ? `${symbol} - Monthly Avg Returns` 
+      : chartLabel === 'year' 
+        ? `${symbol} - Yearly Pattern Returns` 
+        : `${symbol} - Daily Returns`,
     height: 400,
     ...config,
   };
