@@ -13,18 +13,26 @@ interface CumulativeChartWithDragSelectProps {
   data: any[];
   chartScale?: 'linear' | 'log';
   onRangeSelected?: (startDate: string, endDate: string) => void;
+  onDayRangeSelected?: (startDay: number, endDay: number) => void;
   chartColor?: string;
   compareData?: any[];
   compareColor?: string;
+  isEventData?: boolean;
+  enableDragSelect?: boolean;
+  superimposedData?: { id: number; eventDate: string; data: any[] }[];
 }
 
 export function CumulativeChartWithDragSelect({
   data,
   chartScale = 'linear',
   onRangeSelected,
-  chartColor = '#10b981',
+  onDayRangeSelected,
+  chartColor = '#2563eb',
   compareData,
   compareColor = '#dc2626',
+  isEventData = false,
+  enableDragSelect = true,
+  superimposedData,
 }: CumulativeChartWithDragSelectProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -39,42 +47,63 @@ export function CumulativeChartWithDragSelect({
     compareValue?: number | null;
   } | null>(null);
 
-  const { timeRangeSelection, setTimeRangeSelection, clearTimeRangeSelection } = 
+  const { timeRangeSelection, setTimeRangeSelection, clearTimeRangeSelection, setDayRangeSelection, clearDayRangeSelection, dayRangeSelection } = 
     useChartSelectionStore();
 
-  // Initialize drag select hook
-  const { selection, clearSelection, containerRef, isSelecting } = useChartDragSelect(
-    chartRef,
-    seriesRef,
-    {
-      onSelectionComplete: (dragSelection) => {
-        if (dragSelection.startTime && dragSelection.endTime) {
-          setTimeRangeSelection({
-            startTime: dragSelection.startTime,
-            endTime: dragSelection.endTime,
-            startDate: null, // Will be calculated in store
-            endDate: null,
-            isActive: true,
-          });
+  // Initialize drag select hook only when enabled
+  const { selection, clearSelection, containerRef, isSelecting } = enableDragSelect 
+    ? useChartDragSelect(
+        chartRef,
+        seriesRef,
+        {
+          onSelectionComplete: (dragSelection) => {
+            if (dragSelection.startTime !== undefined && dragSelection.endTime !== undefined) {
+              // For event data with relative days, use day range selection
+              if (isEventData && typeof dragSelection.startTime === 'number' && typeof dragSelection.endTime === 'number') {
+                const startDay = Math.min(dragSelection.startTime, dragSelection.endTime);
+                const endDay = Math.max(dragSelection.startTime, dragSelection.endTime);
+                
+                setDayRangeSelection({
+                  startDay,
+                  endDay,
+                  chartType: 'EventDays',
+                  isActive: true,
+                });
+                
+                onDayRangeSelected?.(startDay, endDay);
+              } else {
+                // For regular time-based data
+                setTimeRangeSelection({
+                  startTime: dragSelection.startTime,
+                  endTime: dragSelection.endTime,
+                  startDate: null,
+                  endDate: null,
+                  isActive: true,
+                });
 
-          // Notify parent component
-          const startTimestamp = typeof dragSelection.startTime === 'number'
-            ? dragSelection.startTime * 1000
-            : new Date(dragSelection.startTime as any).getTime();
-          const endTimestamp = typeof dragSelection.endTime === 'number'
-            ? dragSelection.endTime * 1000
-            : new Date(dragSelection.endTime as any).getTime();
+            const startTimestamp = typeof dragSelection.startTime === 'number'
+              ? dragSelection.startTime * 1000
+              : new Date(dragSelection.startTime as any).getTime();
+            const endTimestamp = typeof dragSelection.endTime === 'number'
+              ? dragSelection.endTime * 1000
+              : new Date(dragSelection.endTime as any).getTime();
 
-          const startDate = new Date(startTimestamp).toISOString().split('T')[0];
-          const endDate = new Date(endTimestamp).toISOString().split('T')[0];
+            const startDate = new Date(startTimestamp).toISOString().split('T')[0];
+            const endDate = new Date(endTimestamp).toISOString().split('T')[0];
 
-          onRangeSelected?.(startDate, endDate);
+            onRangeSelected?.(startDate, endDate);
+          }
         }
       },
       minSelectionWidth: 20,
       throttleMs: 16,
     }
-  );
+  ) : { 
+    selection: { startTime: null, endTime: null, startValue: null, endValue: null, isActive: false, isDragging: false }, 
+    clearSelection: () => {}, 
+    containerRef: { current: null }, 
+    isSelecting: false 
+  };
 
   // Initialize chart
   useEffect(() => {
@@ -152,12 +181,36 @@ export function CumulativeChartWithDragSelect({
     seriesRef.current = areaSeries;
     areaSeries.setData(chartData);
 
+    // Add superimposed individual event lines if provided
+    if (superimposedData && superimposedData.length > 0) {
+      superimposedData.forEach((eventLine, idx) => {
+        const lineData = eventLine.data.map((d: any, index: number) => ({
+          time: index as any,
+          value: d.cumulative || 0,
+        }));
+        
+        const lineSeries = chart.addLineSeries({
+          color: `${chartColor}30`, // 20% opacity
+          lineWidth: 1,
+          title: eventLine.eventDate,
+        });
+        lineSeries.setData(lineData);
+      });
+    }
+
     // Add comparison series if provided
     if (compareData && compareData.length > 0) {
-      const compareChartData = compareData.map((d: any) => ({
-        time: Math.floor(new Date(d.date).getTime() / 1000) as any,
-        value: d.cumulative || 0,
-      }));
+      const isCompareEventData = compareData.length > 0 && compareData[0].relativeDay !== undefined;
+      
+      const compareChartData = isCompareEventData
+        ? compareData.map((d: any, index: number) => ({
+            time: index as any,
+            value: d.cumulative || 0,
+          }))
+        : compareData.map((d: any) => ({
+            time: Math.floor(new Date(d.date).getTime() / 1000) as any,
+            value: d.cumulative || 0,
+          }));
 
       const compareSeries = chart.addLineSeries({
         color: compareColor,
@@ -303,6 +356,7 @@ export function CumulativeChartWithDragSelect({
   const handleClearSelection = () => {
     clearSelection();
     clearTimeRangeSelection();
+    clearDayRangeSelection();
   };
 
   // Merge refs
@@ -315,10 +369,13 @@ export function CumulativeChartWithDragSelect({
   return (
     <div className="h-full w-full relative">
       {/* Selection controls */}
-      {(selection.isActive || timeRangeSelection.isActive) && (
+      {(selection.isActive || timeRangeSelection.isActive || dayRangeSelection.isActive) && (
         <div className="absolute top-2 right-2 z-30 flex items-center gap-2">
           <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-1.5 text-xs font-semibold text-slate-700">
-            Range Selected: {timeRangeSelection.startDate} to {timeRangeSelection.endDate}
+            {dayRangeSelection.isActive 
+              ? `Days: T+${dayRangeSelection.startDay} to T+${dayRangeSelection.endDay}`
+              : `${timeRangeSelection.startDate} to ${timeRangeSelection.endDate}`
+            }
           </div>
           <Button
             size="sm"

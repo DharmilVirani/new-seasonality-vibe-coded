@@ -17,9 +17,8 @@ import {
 
 import { analysisApi } from '@/lib/api';
 import { useAnalysisStore } from '@/store/analysisStore';
-import { useChartSelectionStore } from '@/store/chartSelectionStore';
+import { useChartSelectionStore, filterDataByDayRange } from '@/store/chartSelectionStore';
 import { CumulativeChartWithDragSelect, ReturnBarChart } from '@/components/charts';
-import { AnalyticsMatrix } from '@/components/analytics/AnalyticsMatrix';
 import { EventCategorySummary } from '@/components/charts/EventCategorySummary';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,11 +31,11 @@ import {
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
 
-const PRIMARY_COLOR = '#8b5cf6';
+const PRIMARY_COLOR = '#3b82f6';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
-    <RefreshCw className={cn("animate-spin text-violet-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
+    <RefreshCw className={cn("animate-spin text-blue-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
 
@@ -66,7 +65,7 @@ function InfoTooltip({ content }: { content: string }) {
         className="ml-1.5 inline-flex items-center justify-center"
         type="button"
       >
-        <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-violet-600 transition-colors" />
+        <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-blue-600 transition-colors" />
       </button>
       <AnimatePresence>
         {isVisible && (
@@ -95,19 +94,23 @@ function InfoTooltip({ content }: { content: string }) {
 
 export default function EventsPage() {
   const { selectedSymbols, startDate, endDate, chartScale, resetFilters } = useAnalysisStore();
-  const { timeRangeSelection } = useChartSelectionStore();
+  const { timeRangeSelection, dayRangeSelection, clearDayRangeSelection } = useChartSelectionStore();
   const [filterOpen, setFilterOpen] = useState(true);
   const [activeTable, setActiveTable] = useState<'events' | 'categories'>('events');
 
   // Event-specific filters
-  const [selectedEventName, setSelectedEventName] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedEventName, setSelectedEventName] = useState<string>('HOLI');
+  const [selectedCategory, setSelectedCategory] = useState<string>('FESTIVAL');
   const [selectedCountry, setSelectedCountry] = useState<string>('INDIA');
   const [windowBefore, setWindowBefore] = useState<number>(10);
   const [windowAfter, setWindowAfter] = useState<number>(10);
   const [entryPoint, setEntryPoint] = useState<'T-1_CLOSE' | 'T0_OPEN' | 'T0_CLOSE'>('T-1_CLOSE');
   const [exitPoint, setExitPoint] = useState<string>('T+10_CLOSE');
   const [minOccurrences, setMinOccurrences] = useState<number>(3);
+
+  // Compare mode
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSymbol, setCompareSymbol] = useState('');
 
   // Fetch event categories
   const { data: categoriesData } = useQuery({
@@ -160,23 +163,262 @@ export default function EventsPage() {
     retry: false,
   });
 
-  const stats = data?.aggregatedMetrics;
+  // Fetch available symbols for compare dropdown
+  const { data: symbolsData } = useQuery({
+    queryKey: ['symbols'],
+    queryFn: async () => {
+      const response = await analysisApi.getSymbols();
+      return response.data.symbols;
+    },
+  });
 
-  // 1. Data for Main Chart (Average Event Pattern)
-  const mainChartData = useMemo(() => {
-    if (!data?.averageEventCurve) return [];
-    return data.averageEventCurve.map((point: any) => ({
+  const availableSymbols = symbolsData || [];
+
+  // Fetch comparison symbol data
+  const { data: compareData } = useQuery({
+    queryKey: ['event-analysis', compareSymbol, startDate, endDate, selectedEventName, selectedCategory, windowBefore, windowAfter, entryPoint, exitPoint, minOccurrences, timeRangeSelection.startDate, timeRangeSelection.endDate],
+    queryFn: async () => {
+      if (!compareSymbol) return null;
+      const dateRange = timeRangeSelection.isActive
+        ? { startDate: timeRangeSelection.startDate || startDate, endDate: timeRangeSelection.endDate || endDate }
+        : { startDate, endDate };
+
+      const response = await analysisApi.events({
+        symbol: compareSymbol,
+        eventName: selectedEventName || undefined,
+        eventCategory: selectedCategory || undefined,
+        country: selectedCountry,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        windowBefore,
+        windowAfter,
+        entryPoint,
+        exitPoint,
+        minOccurrences,
+      });
+      return response.data.data;
+    },
+    enabled: compareMode && !!compareSymbol,
+  });
+
+  const compareStats = compareData?.aggregatedMetrics;
+
+  // Compare main chart data - Superimposed Returns (compounded from T0)
+  const compareMainChartData = useMemo(() => {
+    if (!compareData?.averageEventCurve || compareData.averageEventCurve.length === 0) return [];
+
+    const sorted = [...compareData.averageEventCurve].sort((a: any, b: any) => a.relativeDay - b.relativeDay);
+    const t0Index = sorted.findIndex((p: any) => p.relativeDay === 0);
+    if (t0Index === -1) return [];
+
+    const multipliers = sorted.map((p: any) => ((Number(p.avgReturn) || 0) / 100) + 1);
+
+    for (let i = t0Index + 1; i < multipliers.length; i++) {
+      multipliers[i] = multipliers[i] * multipliers[i - 1];
+    }
+    for (let i = t0Index - 1; i >= 0; i--) {
+      multipliers[i] = multipliers[i] * multipliers[i + 1];
+    }
+
+    return sorted.map((point: any, idx: number) => ({
       date: `T${point.relativeDay >= 0 ? '+' : ''}${point.relativeDay}`,
       returnPercentage: Number(point.avgReturn) || 0,
-      cumulative: Number(point.avgReturn) || 0,
+      cumulative: Number(((multipliers[idx] - 1) * 100).toFixed(4)),
       relativeDay: point.relativeDay,
     }));
+  }, [compareData?.averageEventCurve]);
+
+  // Get selected day range from store (must be before compareFilteredCumulativeCurve)
+  const selectedStartDay = dayRangeSelection.isActive ? (dayRangeSelection.startDay ?? 0) : null;
+  const selectedEndDay = dayRangeSelection.isActive ? (dayRangeSelection.endDay ?? 0) : null;
+
+  // Compare filtered cumulative curve - using compounded calculation
+  const compareFilteredCumulativeCurve = useMemo(() => {
+    if (!compareData?.averageEventCurve || !dayRangeSelection.isActive || selectedStartDay === null || selectedEndDay === null) {
+      return [];
+    }
+
+    const filteredCurve = compareData.averageEventCurve
+      .filter((point: any) => {
+        const relDay = point.relativeDay;
+        return relDay >= selectedStartDay && relDay <= selectedEndDay;
+      })
+      .sort((a: any, b: any) => a.relativeDay - b.relativeDay);
+
+    if (filteredCurve.length === 0) return [];
+
+    const t0Index = filteredCurve.findIndex((p: any) => p.relativeDay === 0);
+    if (t0Index === -1) {
+      let cumulative = 0;
+      return filteredCurve.map((point: any) => {
+        cumulative += Number(point.avgReturn) || 0;
+        return {
+          date: `T${point.relativeDay >= 0 ? '+' : ''}${point.relativeDay}`,
+          returnPercentage: Number(point.avgReturn) || 0,
+          cumulative: Number(cumulative.toFixed(4)),
+          relativeDay: point.relativeDay,
+        };
+      });
+    }
+
+    const multipliers = filteredCurve.map((p: any) => ((Number(p.avgReturn) || 0) / 100) + 1);
+
+    for (let i = t0Index + 1; i < multipliers.length; i++) {
+      multipliers[i] = multipliers[i] * multipliers[i - 1];
+    }
+    for (let i = t0Index - 1; i >= 0; i--) {
+      multipliers[i] = multipliers[i] * multipliers[i + 1];
+    }
+
+    return filteredCurve.map((point: any, idx: number) => ({
+      date: `T${point.relativeDay >= 0 ? '+' : ''}${point.relativeDay}`,
+      returnPercentage: Number(point.avgReturn) || 0,
+      cumulative: Number(((multipliers[idx] - 1) * 100).toFixed(4)),
+      relativeDay: point.relativeDay,
+    }));
+  }, [compareData?.averageEventCurve, dayRangeSelection.isActive, selectedStartDay, selectedEndDay]);
+
+  const stats = data?.aggregatedMetrics;
+
+  // Filtered stats based on day range selection
+  const filteredStats = useMemo(() => {
+    if (!data?.averageEventCurve || !dayRangeSelection.isActive || selectedStartDay === null || selectedEndDay === null) {
+      return stats;
+    }
+
+    // Filter averageEventCurve for selected range
+    const filteredCurve = data.averageEventCurve.filter((point: any) => {
+      const relDay = point.relativeDay;
+      return relDay >= selectedStartDay && relDay <= selectedEndDay;
+    });
+
+    if (filteredCurve.length === 0) return stats;
+
+    // Calculate stats for filtered range
+    const returns = filteredCurve.map((p: any) => Number(p.avgReturn) || 0);
+    const totalReturn = returns.reduce((a: number, b: number) => a + b, 0);
+    const avgReturn = totalReturn / returns.length;
+    const winningDays = returns.filter((r: number) => r > 0).length;
+    const winRate = (winningDays / returns.length) * 100;
+
+    return {
+      ...stats,
+      avgReturn,
+      winRate,
+      totalReturn,
+    };
+  }, [data?.averageEventCurve, dayRangeSelection.isActive, selectedStartDay, selectedEndDay, stats]);
+
+  // 1. Data for Main Chart - Superimposed Returns (compounded from T0 like old software)
+  const mainChartData = useMemo(() => {
+    if (!data?.averageEventCurve || data.averageEventCurve.length === 0) return [];
+
+    // Sort by relativeDay
+    const sorted = [...data.averageEventCurve].sort((a, b) => a.relativeDay - b.relativeDay);
+
+    // Find T0 index (relativeDay = 0)
+    const t0Index = sorted.findIndex((p: any) => p.relativeDay === 0);
+    if (t0Index === -1) return [];
+
+    // Convert average returns to multipliers
+    const multipliers = sorted.map((p: any) => ((Number(p.avgReturn) || 0) / 100) + 1);
+
+    // Compound from T0 outward (both forward and backward) - like old software
+    // Start from T0 and compound forward
+    for (let i = t0Index + 1; i < multipliers.length; i++) {
+      multipliers[i] = multipliers[i] * multipliers[i - 1];
+    }
+    // Compound backward from T0
+    for (let i = t0Index - 1; i >= 0; i--) {
+      multipliers[i] = multipliers[i] * multipliers[i + 1];
+    }
+
+    // Convert back to percentages and create chart data
+    return sorted.map((point: any, idx: number) => {
+      const compoundedReturn = (multipliers[idx] - 1) * 100;
+      return {
+        date: `T${point.relativeDay >= 0 ? '+' : ''}${point.relativeDay}`,
+        returnPercentage: Number(point.avgReturn) || 0,
+        cumulative: Number(compoundedReturn.toFixed(4)),
+        relativeDay: point.relativeDay,
+      };
+    });
   }, [data?.averageEventCurve]);
 
-  // 2. Data for Cumulative Profit Panel
+  // Filtered main chart data based on selection
+  const filteredMainChartData = useMemo(() => {
+    if (!dayRangeSelection.isActive || selectedStartDay === null || selectedEndDay === null) {
+      return mainChartData;
+    }
+    return mainChartData.filter((point: any) => {
+      return point.relativeDay >= selectedStartDay && point.relativeDay <= selectedEndDay;
+    });
+  }, [mainChartData, dayRangeSelection.isActive, selectedStartDay, selectedEndDay]);
+
+  // Calculate cumulative from filtered curve - using compounded calculation
+  const filteredCumulativeCurve = useMemo(() => {
+    if (!data?.averageEventCurve || !dayRangeSelection.isActive || selectedStartDay === null || selectedEndDay === null) {
+      return [];
+    }
+
+    // Filter and sort by relativeDay
+    const filteredCurve = data.averageEventCurve
+      .filter((point: any) => {
+        const relDay = point.relativeDay;
+        return relDay >= selectedStartDay && relDay <= selectedEndDay;
+      })
+      .sort((a: any, b: any) => a.relativeDay - b.relativeDay);
+
+    if (filteredCurve.length === 0) return [];
+
+    // Find T0 index in filtered data
+    const t0Index = filteredCurve.findIndex((p: any) => p.relativeDay === 0);
+    if (t0Index === -1) {
+      // If no T0 in range, just do simple cumulative
+      let cumulative = 0;
+      return filteredCurve.map((point: any) => {
+        cumulative += Number(point.avgReturn) || 0;
+        return {
+          date: `T${point.relativeDay >= 0 ? '+' : ''}${point.relativeDay}`,
+          returnPercentage: Number(point.avgReturn) || 0,
+          cumulative: Number(cumulative.toFixed(4)),
+          relativeDay: point.relativeDay,
+        };
+      });
+    }
+
+    // Convert to multipliers and compound from T0
+    const multipliers = filteredCurve.map((p: any) => ((Number(p.avgReturn) || 0) / 100) + 1);
+
+    // Compound forward from T0
+    for (let i = t0Index + 1; i < multipliers.length; i++) {
+      multipliers[i] = multipliers[i] * multipliers[i - 1];
+    }
+    // Compound backward from T0
+    for (let i = t0Index - 1; i >= 0; i--) {
+      multipliers[i] = multipliers[i] * multipliers[i + 1];
+    }
+
+    // Convert back to percentages
+    return filteredCurve.map((point: any, idx: number) => ({
+      date: `T${point.relativeDay >= 0 ? '+' : ''}${point.relativeDay}`,
+      returnPercentage: Number(point.avgReturn) || 0,
+      cumulative: Number(((multipliers[idx] - 1) * 100).toFixed(4)),
+      relativeDay: point.relativeDay,
+    }));
+  }, [data?.averageEventCurve, dayRangeSelection.isActive, selectedStartDay, selectedEndDay]);
+
+  // 2. Data for Cumulative Profit Panel - use filtered data when selection active
   const cumulativeProfitData = useMemo(() => {
     if (!data?.eventOccurrences) return [];
 
+    // If day range is selected, use the filtered cumulative curve
+    if (dayRangeSelection.isActive && filteredCumulativeCurve.length > 0) {
+      // For events, show cumulative of average returns for selected range
+      return filteredCumulativeCurve;
+    }
+
+    // Default: show all data
     const sortedEvents = [...data.eventOccurrences].sort((a: any, b: any) =>
       new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime()
     );
@@ -191,18 +433,71 @@ export default function EventsPage() {
         returnPercentage: ret
       };
     });
-  }, [data?.eventOccurrences]);
+  }, [data?.eventOccurrences, dayRangeSelection.isActive, filteredCumulativeCurve]);
 
-  // 3. Data for Pattern Returns Panel
+  // 3. Data for Pattern Returns Panel - use filtered data when selection active  
   const patternReturnsData = useMemo(() => {
     if (!data?.eventOccurrences) return [];
+
+    // If day range is selected, use filtered curve data
+    if (dayRangeSelection.isActive && filteredCumulativeCurve.length > 0) {
+      return filteredCumulativeCurve.map((point: any) => ({
+        date: point.date,
+        returnPercentage: point.returnPercentage
+      }));
+    }
+
+    // Default: show all events
     return [...data.eventOccurrences]
       .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
       .map((event: any) => ({
         date: event.eventDate,
         returnPercentage: Number(event.returnPercentage) || 0
       }));
-  }, [data?.eventOccurrences]);
+  }, [data?.eventOccurrences, dayRangeSelection.isActive, filteredCumulativeCurve]);
+
+  // Compare Cumulative Profit data
+  const compareCumulativeProfitData = useMemo(() => {
+    if (!compareData?.eventOccurrences) return [];
+
+    if (dayRangeSelection.isActive && compareFilteredCumulativeCurve.length > 0) {
+      return compareFilteredCumulativeCurve;
+    }
+
+    const sortedEvents = [...compareData.eventOccurrences].sort((a: any, b: any) =>
+      new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime()
+    );
+
+    let runningTotal = 0;
+    return sortedEvents.map((event: any) => {
+      const ret = Number(event.returnPercentage) || 0;
+      runningTotal += ret;
+      return {
+        date: event.eventDate,
+        cumulative: runningTotal,
+        returnPercentage: ret
+      };
+    });
+  }, [compareData?.eventOccurrences, dayRangeSelection.isActive, compareFilteredCumulativeCurve]);
+
+  // Compare Pattern Returns data
+  const comparePatternReturnsData = useMemo(() => {
+    if (!compareData?.eventOccurrences) return [];
+
+    if (dayRangeSelection.isActive && compareFilteredCumulativeCurve.length > 0) {
+      return compareFilteredCumulativeCurve.map((point: any) => ({
+        date: point.date,
+        returnPercentage: point.returnPercentage
+      }));
+    }
+
+    return [...compareData.eventOccurrences]
+      .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
+      .map((event: any) => ({
+        date: event.eventDate,
+        returnPercentage: Number(event.returnPercentage) || 0
+      }));
+  }, [compareData?.eventOccurrences, dayRangeSelection.isActive, compareFilteredCumulativeCurve]);
 
 
   return (
@@ -220,7 +515,7 @@ export default function EventsPage() {
                 <ChevronRight className="h-4 w-4 text-slate-400 rotate-180" />
               </button>
             )}
-            <Zap className="h-5 w-5 text-violet-600 fill-violet-200" />
+            <Zap className="h-5 w-5 text-blue-600 fill-blue-200" />
             <div>
               <h1 className="text-base font-bold text-slate-900 leading-none">
                 {selectedSymbols[0] || 'NIFTY'}
@@ -239,7 +534,7 @@ export default function EventsPage() {
             <button className="p-1.5 hover:bg-slate-50 rounded-full transition-colors">
               <RefreshCw className="h-4 w-4 text-slate-400" />
             </button>
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-violet-700 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center font-bold text-sm shadow-sm">
               {selectedSymbols[0]?.charAt(0) || 'N'}
             </div>
           </div>
@@ -248,73 +543,93 @@ export default function EventsPage() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5 max-w-[1600px] mx-auto w-full">
 
           {/* STATS STRIP */}
-          {stats && (
+          {(dayRangeSelection.isActive ? filteredStats : stats) && (
             <div className="grid grid-cols-5 gap-4">
               <StatCard
                 label="TOTAL EVENTS"
-                value={stats.totalEvents?.toString() || '0'}
+                value={(dayRangeSelection.isActive ? filteredStats : stats)?.totalEvents?.toString() || '0'}
                 trend="neutral"
-                subValue={selectedEventName || selectedCategory || 'All Events'}
+                subValue={selectedEventName || selectedCategory || (dayRangeSelection.isActive ? `T+${selectedStartDay} to T+${selectedEndDay}` : 'All Events')}
                 metricKey="eventCount"
+                compareValue={compareMode && compareStats ? (compareStats.totalEvents || 0).toString() : undefined}
+                compareLabel={compareSymbol}
               />
               <StatCard
                 label="WIN RATE"
-                value={`${(stats.winRate || 0).toFixed(1)}%`}
-                trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
-                subValue={`${stats.winningEvents || 0} wins`}
+                value={`${((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0).toFixed(1)}%`}
+                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0) > 50 ? 'up' : 'down'}
+                subValue={`${(dayRangeSelection.isActive ? filteredStats : stats)?.winningEvents || 0} wins`}
                 metricKey="winRate"
+                compareValue={compareMode && compareStats ?
+                  `${((compareStats.winRate || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0)) > 0 ? '+' : ''}${(compareStats.winRate || 0 - ((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0)).toFixed(1)}%`
+                  : undefined}
+                compareLabel={compareSymbol}
               />
               <StatCard
                 label="AVG RETURN"
-                value={`${(stats.avgReturn || 0).toFixed(2)}%`}
-                trend={(stats.avgReturn || 0) >= 0 ? 'up' : 'down'}
-                subValue={`Median: ${(stats.medianReturn || 0).toFixed(2)}%`}
+                value={`${((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturn || 0).toFixed(2)}%`}
+                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturn || 0) >= 0 ? 'up' : 'down'}
+                subValue={`Total: ${((dayRangeSelection.isActive ? filteredStats : stats)?.totalReturn || 0).toFixed(2)}%`}
                 metricKey="avgReturn"
+                compareValue={compareMode && compareStats ?
+                  `${((compareStats.avgReturn || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturn || 0)) > 0 ? '+' : ''}${(compareStats.avgReturn || 0 - ((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturn || 0)).toFixed(2)}%`
+                  : undefined}
+                compareLabel={compareSymbol}
               />
               <StatCard
                 label="SHARPE RATIO"
-                value={(stats.sharpeRatio || 0).toFixed(2)}
-                trend={(stats.sharpeRatio || 0) > 0 ? 'up' : 'down'}
-                subValue={(stats.sharpeRatio || 0) > 0 ? 'Good' : 'Poor'}
+                value={(dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio?.toFixed(2) || '0.00'}
+                trend={(dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio ? ((dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio || 0) > 0 ? 'up' : 'down' : 'neutral'}
+                subValue={(dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio ? ((dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio || 0) > 0 ? 'Good' : 'Poor' : 'N/A'}
                 metricKey="sharpeRatio"
+                compareValue={compareMode && compareStats ?
+                  `${((compareStats.sharpeRatio || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio || 0)) > 0 ? '+' : ''}${(compareStats.sharpeRatio || 0 - ((dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio || 0)).toFixed(2)}`
+                  : undefined}
+                compareLabel={compareSymbol}
               />
               <StatCard
                 label="PROFIT FACTOR"
-                value={(stats.profitFactor || 0).toFixed(2)}
-                trend={(stats.profitFactor || 0) > 1 ? 'up' : 'down'}
-                subValue={`Max DD: ${(stats.maxDrawdown || 0).toFixed(2)}%`}
+                value={(dayRangeSelection.isActive ? filteredStats : stats)?.profitFactor?.toFixed(2) || '0.00'}
+                trend={(dayRangeSelection.isActive ? filteredStats : stats)?.profitFactor ? ((dayRangeSelection.isActive ? filteredStats : stats)?.profitFactor || 0) > 1 ? 'up' : 'down' : 'neutral'}
+                subValue={`Max DD: ${((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0).toFixed(2)}%`}
                 metricKey="maxDrawdown"
+                compareValue={compareMode && compareStats ?
+                  `${((compareStats.profitFactor || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.profitFactor || 0)) > 0 ? '+' : ''}${(compareStats.profitFactor || 0 - ((dayRangeSelection.isActive ? filteredStats : stats)?.profitFactor || 0)).toFixed(2)}`
+                  : undefined}
+                compareLabel={compareSymbol}
               />
             </div>
           )}
 
-          {/* MAIN CHART - Average Event Pattern & Analytics Matrix */}
-          <div className="grid grid-cols-3 gap-5 h-[400px]">
-            <div className="col-span-2 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden">
-              <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
-                <div className="flex items-center">
-                  <h3 className="font-semibold text-slate-800 text-sm">Average Event Pattern</h3>
-                  <InfoTooltip content="Shows the average price movement pattern across all event occurrences. The X-axis represents days relative to the event (T0), and the Y-axis shows the cumulative return percentage." />
-                </div>
+          {/* MAIN CHART - Superimposed Returns */}
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col h-[400px] overflow-hidden">
+            <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
+              <div className="flex items-center">
+                <h3 className="font-semibold text-slate-800 text-sm">Superimposed Returns</h3>
+                <InfoTooltip content="Shows the cumulative/compounded returns across all event occurrences. Each point represents the average return at that relative day, compounded from the start." />
               </div>
-              <div className="flex-1 w-full relative p-4">
-                {!data ? (
-                  <PlaceholderState />
-                ) : (
-                  <CumulativeChartWithDragSelect
-                    data={mainChartData}
-                    chartScale={chartScale}
-                    chartColor="#8b5cf6"
-                  />
-                )}
-              </div>
+              {dayRangeSelection.isActive && (
+                <button
+                  onClick={() => clearDayRangeSelection()}
+                  className="text-xs text-red-600 hover:text-red-700 font-medium flex items-center gap-1"
+                >
+                  Clear Selection
+                </button>
+              )}
             </div>
-
-            <div className="col-span-1 h-full">
-              <AnalyticsMatrix
-                data={data?.eventOccurrences || []}
-                stats={stats}
-              />
+            <div className="flex-1 w-full relative p-4">
+              {!data ? (
+                <PlaceholderState />
+              ) : (
+                <CumulativeChartWithDragSelect
+                  data={mainChartData}
+                  chartScale={chartScale}
+                  chartColor="#3b82f6"
+                  isEventData={true}
+                  compareData={compareMode && compareMainChartData.length > 0 ? compareMainChartData : undefined}
+                  compareColor="#001d4bff"
+                />
+              )}
             </div>
           </div>
 
@@ -333,7 +648,10 @@ export default function EventsPage() {
                   <CumulativeChartWithDragSelect
                     data={cumulativeProfitData}
                     chartScale="linear"
-                    chartColor="#8b5cf6"
+                    chartColor="#3b82f6"
+                    compareData={compareMode && compareCumulativeProfitData.length > 0 ? compareCumulativeProfitData : undefined}
+                    compareColor="#001d4bff"
+                    enableDragSelect={false}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
@@ -355,6 +673,10 @@ export default function EventsPage() {
                     data={patternReturnsData}
                     symbol={selectedSymbols[0]}
                     config={{ title: '', height: 240 }}
+                    color="#3b82f6"
+                    compareData={compareMode && comparePatternReturnsData.length > 0 ? comparePatternReturnsData : undefined}
+                    compareSymbol={compareMode ? compareSymbol : undefined}
+                    compareColor="#001d4bff"
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
@@ -377,7 +699,7 @@ export default function EventsPage() {
                   className={cn(
                     "px-4 py-2 text-xs font-medium rounded-md transition-colors",
                     activeTable === tab.id
-                      ? "bg-violet-600 text-white shadow-sm"
+                      ? "bg-blue-600 text-white shadow-sm"
                       : "text-slate-600 hover:bg-white hover:shadow-sm"
                   )}
                 >
@@ -397,8 +719,9 @@ export default function EventsPage() {
                 />
               )}
               {activeTable === 'categories' && (
-                <EventCategorySummary 
-                  data={data?.eventOccurrences || []} 
+                <EventCategorySummary
+                  data={data?.eventOccurrences || []}
+                  defaultCategory={selectedCategory}
                 />
               )}
             </div>
@@ -428,6 +751,42 @@ export default function EventsPage() {
           </div>
         </FilterSection>
 
+        <FilterSection title="Compare" defaultOpen delay={0.02} icon={<SlidersHorizontal className="h-4 w-4" />}>
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="compareMode"
+                checked={compareMode}
+                onChange={(e) => {
+                  setCompareMode(e.target.checked);
+                  if (!e.target.checked) setCompareSymbol('');
+                }}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="compareMode" className="text-sm text-slate-700">Enable comparison</label>
+            </div>
+
+            {compareMode && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Compare Symbol</label>
+                <Select value={compareSymbol} onValueChange={setCompareSymbol}>
+                  <SelectTrigger className="w-full h-9 text-xs">
+                    <SelectValue placeholder="Select symbol to compare" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSymbols.map((symbol: { symbol: string; name: string }) => (
+                      <SelectItem key={symbol.symbol} value={symbol.symbol}>
+                        {symbol.symbol}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </FilterSection>
+
         <FilterSection title="Time Ranges" defaultOpen delay={0.15} icon={<Calendar className="h-4 w-4" />}>
           <div className="space-y-3 pt-1">
             <div>
@@ -435,7 +794,8 @@ export default function EventsPage() {
               <input
                 type="date"
                 value={startDate}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                onChange={(e) => useAnalysisStore.getState().setDateRange(e.target.value, useAnalysisStore.getState().endDate)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
             </div>
             <div>
@@ -443,19 +803,8 @@ export default function EventsPage() {
               <input
                 type="date"
                 value={endDate}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
-              />
-            </div>
-            <div>
-              <div className="flex justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Last N Days (0 to disable)</label>
-                <span className="text-[10px] font-bold text-slate-400">0</span>
-              </div>
-              <input
-                type="number"
-                value={0}
-                readOnly
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none bg-slate-50 text-slate-400"
+                onChange={(e) => useAnalysisStore.getState().setDateRange(useAnalysisStore.getState().startDate, e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
             </div>
           </div>
@@ -523,7 +872,7 @@ export default function EventsPage() {
                 value={windowBefore}
                 onChange={(e) => setWindowBefore(Number(e.target.value))}
                 min={0}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
             </div>
             <div>
@@ -533,7 +882,7 @@ export default function EventsPage() {
                 value={windowAfter}
                 onChange={(e) => setWindowAfter(Number(e.target.value))}
                 min={0}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
             </div>
             <div>
@@ -571,22 +920,25 @@ export default function EventsPage() {
                 value={minOccurrences}
                 onChange={(e) => setMinOccurrences(Number(e.target.value))}
                 min={1}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400"
+                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
             </div>
           </div>
         </FilterSection>
+
       </RightFilterConsole>
     </div>
   );
 }
 
-function StatCard({ label, value, subValue, trend, metricKey }: {
+function StatCard({ label, value, subValue, trend, metricKey, compareValue, compareLabel }: {
   label: string;
   value: string;
   subValue?: string;
   trend?: 'up' | 'down' | 'neutral';
   metricKey?: string;
+  compareValue?: string;
+  compareLabel?: string;
 }) {
   return (
     <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
@@ -596,19 +948,20 @@ function StatCard({ label, value, subValue, trend, metricKey }: {
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
-          <div className="text-2xl font-bold text-slate-900">{value}</div>
-          {trend && trend !== 'neutral' && (
-            <div className={cn(
-              "text-xs font-semibold",
-              trend === 'up' ? "text-emerald-600" : "text-rose-600"
-            )}>
-              {trend === 'up' ? '↗' : '↘'}
-            </div>
-          )}
+          <div className={cn(
+            "text-2xl font-bold",
+            trend === 'up' ? "text-emerald-600" : trend === 'down' ? "text-red-600" : "text-slate-900"
+          )}>{value}</div>
         </div>
         {subValue && (
           <div className="text-[10px] font-medium text-slate-400 mt-0.5">
             {subValue}
+          </div>
+        )}
+        {compareValue && (
+          <div className="flex items-center gap-1.5 mt-1 pt-1.5 border-t border-slate-100">
+            <span className="text-[10px] font-semibold text-red-600">{compareLabel || 'VS'}:</span>
+            <span className="text-xs font-bold text-red-700">{compareValue}</span>
           </div>
         )}
       </div>
@@ -652,8 +1005,8 @@ function EventDataTable({ data, symbol, mean, stdDev }: { data: any[], symbol: s
                   <span className={cn(
                     "px-2 py-1 rounded font-semibold text-[11px]",
                     (row.returnPercentage || 0) >= 0
-                      ? "bg-violet-50 text-violet-700"
-                      : "bg-violet-100 text-violet-500"
+                      ? "bg-blue-50 text-blue-700"
+                      : "bg-blue-100 text-blue-500"
                   )}>
                     {(row.returnPercentage || 0) > 0 ? '+' : ''}
                     {(row.returnPercentage || 0).toFixed(2)}%

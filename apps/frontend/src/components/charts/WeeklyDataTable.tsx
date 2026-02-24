@@ -3,10 +3,9 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, HelpCircle } from 'lucide-react';
+import { Download, HelpCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { cn, formatPercentage } from '@/lib/utils';
 
-// Simple black tooltip for table headers
 function HeaderTooltip({ label, formula, description }: { label: string; formula: string; description: string }) {
   const [isVisible, setIsVisible] = useState(false);
   
@@ -49,6 +48,7 @@ interface WeeklyDataTableProps {
   title?: string;
   viewMode?: 'yearly' | 'monthly';
   onViewModeChange?: (mode: 'yearly' | 'monthly') => void;
+  pageSize?: number;
 }
 
 export function WeeklyDataTable({
@@ -56,13 +56,14 @@ export function WeeklyDataTable({
   title = 'Weekly Statistics',
   viewMode: externalViewMode,
   onViewModeChange,
+  pageSize = 10,
 }: WeeklyDataTableProps) {
   const [internalViewMode, setInternalViewMode] = useState<'yearly' | 'monthly'>('yearly');
+  const [currentPage, setCurrentPage] = useState(1);
   
   const viewMode = externalViewMode ?? internalViewMode;
   const setViewMode = onViewModeChange ?? setInternalViewMode;
 
-  // Calculate aggregate statistics for "All Weeks"
   const aggregateStats = useMemo(() => {
     if (!data || data.length === 0) return null;
 
@@ -70,7 +71,6 @@ export function WeeklyDataTable({
     const totalPosCount = data.reduce((sum, d) => sum + d.posCount, 0);
     const totalNegCount = data.reduce((sum, d) => sum + d.negCount, 0);
     
-    // Weighted average calculations
     const weightedAvgReturn = totalCount > 0
       ? data.reduce((sum, d) => sum + d.avgReturnAll * d.allCount, 0) / totalCount
       : 0;
@@ -98,18 +98,25 @@ export function WeeklyDataTable({
     };
   }, [data]);
 
-  // Filter and sort data based on view mode
   const filteredData = useMemo(() => {
     if (!data) return [];
     
     if (viewMode === 'monthly') {
-      // Monthly weeks are typically 1-5
       return data.filter(d => d.week >= 1 && d.week <= 5).sort((a, b) => a.week - b.week);
     }
     
-    // Yearly weeks are 1-52
     return data.filter(d => d.week >= 1 && d.week <= 52).sort((a, b) => a.week - b.week);
   }, [data, viewMode]);
+
+  // Reset page when viewMode changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [viewMode]);
+
+  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedData = filteredData.slice(startIndex, endIndex);
 
   const getReturnColorClass = (value: number): string => {
     if (value > 0) return 'text-green-600';
@@ -123,44 +130,21 @@ export function WeeklyDataTable({
 
   const downloadCSV = () => {
     const headers = [
-      'Week',
-      'All Count',
-      'Avg Return All',
-      'Sum Return All',
-      'Pos Count',
-      'Avg Return Pos',
-      'Sum Return Pos',
-      'Neg Count',
-      'Avg Return Neg',
-      'Sum Return Neg',
+      'Week', 'All Count', 'Avg Return All', 'Sum Return All',
+      'Pos Count', 'Avg Return Pos', 'Sum Return Pos',
+      'Neg Count', 'Avg Return Neg', 'Sum Return Neg',
     ];
 
     const rows = [
-      // Aggregate row
-      [
-        'All Weeks',
-        aggregateStats?.allCount ?? 0,
-        aggregateStats?.avgReturnAll.toFixed(2) ?? 0,
-        aggregateStats?.sumReturnAll.toFixed(2) ?? 0,
-        aggregateStats?.posCount ?? 0,
-        aggregateStats?.avgReturnPos.toFixed(2) ?? 0,
-        aggregateStats?.sumReturnPos.toFixed(2) ?? 0,
-        aggregateStats?.negCount ?? 0,
-        aggregateStats?.avgReturnNeg.toFixed(2) ?? 0,
-        aggregateStats?.sumReturnNeg.toFixed(2) ?? 0,
-      ],
-      // Individual rows
+      ['All Weeks', aggregateStats?.allCount ?? 0, aggregateStats?.avgReturnAll.toFixed(2) ?? 0,
+       aggregateStats?.sumReturnAll.toFixed(2) ?? 0, aggregateStats?.posCount ?? 0,
+       aggregateStats?.avgReturnPos.toFixed(2) ?? 0, aggregateStats?.sumReturnPos.toFixed(2) ?? 0,
+       aggregateStats?.negCount ?? 0, aggregateStats?.avgReturnNeg.toFixed(2) ?? 0,
+       aggregateStats?.sumReturnNeg.toFixed(2) ?? 0],
       ...filteredData.map((d) => [
-        d.week,
-        d.allCount,
-        d.avgReturnAll.toFixed(2),
-        d.sumReturnAll.toFixed(2),
-        d.posCount,
-        d.avgReturnPos.toFixed(2),
-        d.sumReturnPos.toFixed(2),
-        d.negCount,
-        d.avgReturnNeg.toFixed(2),
-        d.sumReturnNeg.toFixed(2),
+        d.week, d.allCount, d.avgReturnAll.toFixed(2), d.sumReturnAll.toFixed(2),
+        d.posCount, d.avgReturnPos.toFixed(2), d.sumReturnPos.toFixed(2),
+        d.negCount, d.avgReturnNeg.toFixed(2), d.sumReturnNeg.toFixed(2),
       ]),
     ];
 
@@ -180,9 +164,7 @@ export function WeeklyDataTable({
           <CardTitle className="text-lg">{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-slate-500">
-            No weekly data available
-          </div>
+          <div className="text-center py-8 text-slate-500">No weekly data available</div>
         </CardContent>
       </Card>
     );
@@ -194,15 +176,12 @@ export function WeeklyDataTable({
         <div className="flex items-center gap-4">
           <CardTitle className="text-lg">{title}</CardTitle>
           
-          {/* View Mode Toggle */}
           <div className="flex bg-slate-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode('yearly')}
               className={cn(
                 'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                viewMode === 'yearly'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                viewMode === 'yearly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               )}
             >
               Yearly Weeks
@@ -211,9 +190,7 @@ export function WeeklyDataTable({
               onClick={() => setViewMode('monthly')}
               className={cn(
                 'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                viewMode === 'monthly'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                viewMode === 'monthly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               )}
             >
               Monthly Weeks
@@ -232,88 +209,43 @@ export function WeeklyDataTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">
-                <th className="p-3 text-left font-semibold bg-slate-50 text-slate-700 sticky left-0 z-10">
-                  <HeaderTooltip 
-                    label="Week" 
-                    formula="Week Number" 
-                    description="Trading week of the year (1-52) or month (1-5)"
-                  />
+                <th className="p-3 text-left font-semibold bg-slate-50 text-slate-700">
+                  <HeaderTooltip label="Week" formula="Week Number" description="Trading week of the year (1-52) or month (1-5)" />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="All Count" 
-                    formula="Total Occurrences" 
-                    description="Number of times this week occurred in the data"
-                  />
+                  <HeaderTooltip label="All Count" formula="Total Occurrences" description="Number of times this week occurred in the data" />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Avg Return All" 
-                    formula="Σ(Returns) ÷ Count" 
-                    description="Average return across all occurrences"
-                  />
+                  <HeaderTooltip label="Avg Return All" formula="Σ(Returns) ÷ Count" description="Average return across all occurrences" />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Sum Return All" 
-                    formula="Σ(Returns)" 
-                    description="Total compounded return for all occurrences"
-                  />
+                  <HeaderTooltip label="Sum Return All" formula="Σ(Returns)" description="Total compounded return for all occurrences" />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Pos Count" 
-                    formula="Count of Positive Returns" 
-                    description="Number of profitable occurrences"
-                  />
+                  <HeaderTooltip label="Pos Count" formula="Count of Positive Returns" description="Number of profitable occurrences" />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Avg Return Pos" 
-                    formula="Σ(Positive Returns) ÷ Pos Count" 
-                    description="Average return of only profitable periods"
-                  />
+                  <HeaderTooltip label="Avg Return Pos" formula="Σ(Positive Returns) ÷ Pos Count" description="Average return of only profitable periods" />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Sum Return Pos" 
-                    formula="Σ(Positive Returns)" 
-                    description="Total return from profitable periods only"
-                  />
+                  <HeaderTooltip label="Sum Return Pos" formula="Σ(Positive Returns)" description="Total return from profitable periods only" />
                 </th>
                 <th className="p-3 text-center font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Neg Count" 
-                    formula="Count of Negative Returns" 
-                    description="Number of losing occurrences"
-                  />
+                  <HeaderTooltip label="Neg Count" formula="Count of Negative Returns" description="Number of losing occurrences" />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Avg Return Neg" 
-                    formula="Σ(Negative Returns) ÷ Neg Count" 
-                    description="Average return of only losing periods"
-                  />
+                  <HeaderTooltip label="Avg Return Neg" formula="Σ(Negative Returns) ÷ Neg Count" description="Average return of only losing periods" />
                 </th>
                 <th className="p-3 text-right font-semibold bg-slate-50 text-slate-700">
-                  <HeaderTooltip 
-                    label="Sum Return Neg" 
-                    formula="Σ(Negative Returns)" 
-                    description="Total return from losing periods only"
-                  />
+                  <HeaderTooltip label="Sum Return Neg" formula="Σ(Negative Returns)" description="Total return from losing periods only" />
                 </th>
               </tr>
             </thead>
             <tbody>
-              {/* Aggregate Row */}
               {aggregateStats && (
-                <tr className="border-b-2 border-slate-300 bg-amber-50/50 font-semibold">
-                  <td className="p-3 sticky left-0 z-10 bg-amber-50/50 font-bold text-slate-900">
-                    All Weeks
-                  </td>
-                  <td className="p-3 text-center text-slate-700">
-                    {aggregateStats.allCount}
-                  </td>
+                <tr className="border-b-2 border-slate-300 bg-blue-50/50 font-semibold">
+                  <td className="p-3 bg-blue-50/50 font-bold text-slate-900">All Weeks</td>
+                  <td className="p-3 text-center text-slate-700">{aggregateStats.allCount}</td>
                   <td className={cn('p-3 text-right', getReturnColorClass(aggregateStats.avgReturnAll))}>
                     {formatPercentage(aggregateStats.avgReturnAll)}
                   </td>
@@ -323,33 +255,22 @@ export function WeeklyDataTable({
                   <td className="p-3 text-center text-green-600">
                     {getCountDisplay(aggregateStats.posCount, aggregateStats.posAccuracy)}
                   </td>
-                  <td className="p-3 text-right text-green-600">
-                    {formatPercentage(aggregateStats.avgReturnPos)}
-                  </td>
-                  <td className="p-3 text-right text-green-600">
-                    {formatPercentage(aggregateStats.sumReturnPos)}
-                  </td>
+                  <td className="p-3 text-right text-green-600">{formatPercentage(aggregateStats.avgReturnPos)}</td>
+                  <td className="p-3 text-right text-green-600">{formatPercentage(aggregateStats.sumReturnPos)}</td>
                   <td className="p-3 text-center text-red-600">
                     {getCountDisplay(aggregateStats.negCount, aggregateStats.negAccuracy)}
                   </td>
-                  <td className="p-3 text-right text-red-600">
-                    {formatPercentage(aggregateStats.avgReturnNeg)}
-                  </td>
-                  <td className="p-3 text-right text-red-600">
-                    {formatPercentage(aggregateStats.sumReturnNeg)}
-                  </td>
+                  <td className="p-3 text-right text-red-600">{formatPercentage(aggregateStats.avgReturnNeg)}</td>
+                  <td className="p-3 text-right text-red-600">{formatPercentage(aggregateStats.sumReturnNeg)}</td>
                 </tr>
               )}
               
-              {/* Individual Week Rows */}
-              {filteredData.map((row) => (
+              {paginatedData.map((row) => (
                 <tr key={row.week} className="border-b border-slate-100 hover:bg-slate-50/50">
-                  <td className="p-3 sticky left-0 z-10 bg-white font-medium text-slate-900">
+                  <td className="p-3 bg-white font-medium text-slate-900">
                     {viewMode === 'monthly' ? `Week ${row.week}` : `W${row.week}`}
                   </td>
-                  <td className="p-3 text-center text-slate-600">
-                    {row.allCount}
-                  </td>
+                  <td className="p-3 text-center text-slate-600">{row.allCount}</td>
                   <td className={cn('p-3 text-right font-medium', getReturnColorClass(row.avgReturnAll))}>
                     {formatPercentage(row.avgReturnAll)}
                   </td>
@@ -357,41 +278,73 @@ export function WeeklyDataTable({
                     {formatPercentage(row.sumReturnAll)}
                   </td>
                   <td className="p-3 text-center">
-                    <span className="text-green-600">
-                      {getCountDisplay(row.posCount, row.posAccuracy)}
-                    </span>
+                    <span className="text-green-600">{getCountDisplay(row.posCount, row.posAccuracy)}</span>
                   </td>
-                  <td className="p-3 text-right text-green-600">
-                    {formatPercentage(row.avgReturnPos)}
-                  </td>
-                  <td className="p-3 text-right text-green-600">
-                    {formatPercentage(row.sumReturnPos)}
-                  </td>
+                  <td className="p-3 text-right text-green-600">{formatPercentage(row.avgReturnPos)}</td>
+                  <td className="p-3 text-right text-green-600">{formatPercentage(row.sumReturnPos)}</td>
                   <td className="p-3 text-center">
-                    <span className="text-red-600">
-                      {getCountDisplay(row.negCount, row.negAccuracy)}
-                    </span>
+                    <span className="text-red-600">{getCountDisplay(row.negCount, row.negAccuracy)}</span>
                   </td>
-                  <td className="p-3 text-right text-red-600">
-                    {formatPercentage(row.avgReturnNeg)}
-                  </td>
-                  <td className="p-3 text-right text-red-600">
-                    {formatPercentage(row.sumReturnNeg)}
-                  </td>
+                  <td className="p-3 text-right text-red-600">{formatPercentage(row.avgReturnNeg)}</td>
+                  <td className="p-3 text-right text-red-600">{formatPercentage(row.sumReturnNeg)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         
-        {/* Summary footer */}
-        <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            Showing {filteredData.length} {viewMode === 'monthly' ? 'monthly' : 'yearly'} weeks
-          </span>
-          <span>
-            {aggregateStats?.allCount ?? 0} total observations
-          </span>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 pt-4 border-t-2 border-slate-200 flex items-center justify-between">
+            <div className="text-sm font-semibold text-slate-700">
+              Showing <span className="text-blue-600">{startIndex + 1}-{Math.min(endIndex, filteredData.length)}</span> of {filteredData.length} weeks
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-40"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronsLeft className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-40"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <span className="px-4 py-2 text-sm font-bold text-slate-800 bg-blue-50 rounded-lg border-2 border-blue-200">
+                {currentPage} <span className="text-slate-500 font-normal">/</span> {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-40"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-40"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+              >
+                <ChevronsRight className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        <div className="mt-3 text-sm font-medium text-slate-600">
+          {aggregateStats?.allCount ?? 0} total observations
         </div>
       </CardContent>
     </Card>

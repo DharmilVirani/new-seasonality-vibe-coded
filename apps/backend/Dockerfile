@@ -1,15 +1,12 @@
 # Seasonality SaaS Backend Dockerfile
-# Alpine-based build with OpenSSL 3.x support for Prisma
+# Debian-based build for better compatibility
 
 # =====================================================
 # Stage 1: Dependencies
 # =====================================================
-FROM node:20-alpine AS deps
+FROM node:20-bookworm AS deps
 
 WORKDIR /app
-
-# Install OpenSSL 3.x and build dependencies
-RUN apk add --no-cache libc6-compat openssl openssl-dev
 
 # Copy package files
 COPY package*.json ./
@@ -18,10 +15,10 @@ COPY prisma ./prisma/
 # Install all dependencies
 RUN npm ci --no-audit --progress=false --fetch-retries=5 --fetch-timeout=600000
 
-# Generate Prisma client - schema.prisma has binaryTargets configured
+# Generate Prisma client
 RUN npx prisma generate
 
-# Debug: List generated Prisma files to verify correct binary
+# Debug: List generated Prisma files
 RUN echo "=== Prisma client files ===" && \
     ls -la /app/node_modules/.prisma/client/ && \
     echo "=== Looking for query engine ===" && \
@@ -30,19 +27,13 @@ RUN echo "=== Prisma client files ===" && \
 # =====================================================
 # Stage 2: Production
 # =====================================================
-FROM node:20-alpine AS runner
+FROM node:20-bookworm AS runner
 
 WORKDIR /app
 
-# Install runtime dependencies - OpenSSL 3.x
-RUN apk add --no-cache openssl libc6-compat
-
-# Verify OpenSSL version
-RUN echo "OpenSSL version:" && openssl version
-
 # Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 expressjs
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs expressjs
 
 # Set environment
 ENV NODE_ENV=production

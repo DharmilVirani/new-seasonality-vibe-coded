@@ -14,7 +14,7 @@ import { RefreshCw, X } from 'lucide-react';
 import { cn, formatNumber, formatPercentage } from '@/lib/utils';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 
-const PRIMARY_COLOR = '#6366f1';
+const PRIMARY_COLOR = '#f43f5e';
 
 export default function BasketPage() {
   const { startDate, endDate, resetFilters } = useAnalysisStore();

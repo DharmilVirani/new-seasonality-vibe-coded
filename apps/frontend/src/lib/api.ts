@@ -319,6 +319,11 @@ export interface FilterConfig {
   weekFilters?: WeekFilters;
   dayFilters?: DayFilters;
   outlierFilters?: OutlierFilters;
+  // Scanner-specific filters
+  evenOddYears?: string;
+  specificMonth?: number;
+  specificExpiryWeekMonthly?: number;
+  specificMondayWeekMonthly?: number;
 }
 
 interface YearFilters {

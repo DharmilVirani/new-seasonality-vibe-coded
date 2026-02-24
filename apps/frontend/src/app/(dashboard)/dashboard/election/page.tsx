@@ -20,7 +20,7 @@ import { SymbolSelector, DateRangePicker } from '@/components/filters';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 import { cn, formatPercentage, formatNumber } from '@/lib/utils';
 
-const PRIMARY_COLOR = '#ef4444';
+const PRIMARY_COLOR = '#d97706';
 
 const electionTypes = [
   { key: 'All', label: 'All Years' },

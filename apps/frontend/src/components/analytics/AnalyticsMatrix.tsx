@@ -7,22 +7,22 @@ import { HelpCircle } from 'lucide-react';
 
 // Simple black tooltip component
 function SimpleTooltip({ content, children }: { content: React.ReactNode; children: React.ReactNode }) {
-  const [isVisible, setIsVisible] = useState(false);
-  
-  return (
-    <span 
-      className="relative inline-flex items-center"
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
-    >
-      {children}
-      {isVisible && (
-        <div className="fixed z-[9999] bg-black text-white text-xs px-3 py-2 rounded shadow-lg pointer-events-none whitespace-nowrap">
-          {content}
-        </div>
-      )}
-    </span>
-  );
+    const [isVisible, setIsVisible] = useState(false);
+
+    return (
+        <span
+            className="relative inline-flex items-center"
+            onMouseEnter={() => setIsVisible(true)}
+            onMouseLeave={() => setIsVisible(false)}
+        >
+            {children}
+            {isVisible && (
+                <div className="fixed z-[9999] bg-black text-white text-xs px-3 py-2 rounded shadow-lg pointer-events-none whitespace-nowrap">
+                    {content}
+                </div>
+            )}
+        </span>
+    );
 }
 
 interface AnalyticsMatrixProps {
@@ -65,25 +65,48 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
 
     // 2. Specialized Metrics
     const annualizedReturn = useMemo(() => {
-        if (!stats?.avgReturn) return 0;
-        // Simple annualized return approximation: avgReturn * (252 / avgHoldingDays)
-        // Assuming avgHoldingDays is available or defaulting to 3
-        const avgHolding = stats.avgHoldingDays || 5;
-        return (stats.avgReturn * (252 / avgHolding));
-    }, [stats]);
+        if (!data || data.length === 0) return 0;
+
+        // Accurate CAGR Calculation based on actual date range
+        // Find the earliest and latest dates in the dataset
+        const dates = data.map(d => new Date(d.eventDate || d.date).getTime()).filter(t => !isNaN(t));
+
+        if (dates.length < 2) {
+            // Fallback for single data point
+            const avgHolding = stats?.avgHoldingDays || 5;
+            return (stats?.avgReturn || 0) * (252 / avgHolding);
+        }
+
+        const minDate = Math.min(...dates);
+        const maxDate = Math.max(...dates);
+
+        // Calculate years elapsed (milliseconds to years)
+        const yearsElapsed = Math.max(0.1, (maxDate - minDate) / (1000 * 60 * 60 * 24 * 365.25));
+
+        // Calculate cumulative return
+        const totalReturnPct = data.reduce((sum, d) => sum + (d.returnPercentage || 0), 0) / 100;
+        const cumulativeReturn = 1 + totalReturnPct;
+
+        if (cumulativeReturn <= 0) return -100; // Complete loss
+
+        // CAGR Formular: (End Value / Start Value)^(1/years) - 1
+        const cagr = (Math.pow(cumulativeReturn, 1 / yearsElapsed) - 1) * 100;
+
+        return cagr;
+    }, [stats, data]);
 
     const totalProfit = useMemo(() => {
         if (!data || data.length === 0) return 0;
         const totalReturn = data.reduce((sum, d) => sum + (d.returnPercentage || 0), 0);
-        const inrRate = parseInt(process.env.NEXT_PUBLIC_INR_RATE || '83', 10);
-        return (10000 * inrRate) * (totalReturn / 100);
+        // Calculate based directly on ₹10L (1,000,000)
+        return 1000000 * (totalReturn / 100);
     }, [data]);
 
     const metrics = [
-        { 
-            label: 'Annualized Return', 
-            value: `${annualizedReturn.toFixed(1)}%`, 
-            trend: annualizedReturn > 0 ? 'up' : 'down', 
+        {
+            label: 'Annualized Return',
+            value: `${annualizedReturn.toFixed(1)}%`,
+            trend: annualizedReturn > 0 ? 'up' : 'down',
             subType: 'CAGR',
             tooltip: (
                 <div>
@@ -93,10 +116,10 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
                 </div>
             )
         },
-        { 
-            label: 'Average Return', 
-            value: `${(stats?.avgReturn || 0).toFixed(2)}%`, 
-            trend: (stats?.avgReturn || 0) > 0 ? 'up' : 'down', 
+        {
+            label: 'Average Return',
+            value: `${(stats?.avgReturn || 0).toFixed(2)}%`,
+            trend: (stats?.avgReturn || 0) > 0 ? 'up' : 'down',
             subType: 'Per Trade',
             tooltip: (
                 <div>
@@ -106,23 +129,23 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
                 </div>
             )
         },
-        { 
-            label: 'Total Profit', 
-            value: `₹${totalProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, 
-            trend: totalProfit > 0 ? 'up' : 'down', 
-            subType: `on ₹${((10000 * parseInt(process.env.NEXT_PUBLIC_INR_RATE || '83', 10)) / 100000).toFixed(1)}L`,
+        {
+            label: 'Total Profit',
+            value: `₹${totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+            trend: totalProfit > 0 ? 'up' : 'down',
+            subType: `on ₹10L`,
             tooltip: (
                 <div>
                     <div className="font-semibold mb-1">Total Profit</div>
-                    <div className="text-slate-300">Formula: Investment × (Total Return %)</div>
-                    <div className="text-slate-400 text-[10px] mt-1">Absolute profit on ₹10L investment</div>
+                    <div className="text-slate-300">Formula: ₹10,00,000 × (Σ returns)</div>
+                    <div className="text-slate-400 text-[10px] mt-1">Absolute profit simulating a simple ₹10L base investment for each trade</div>
                 </div>
             )
         },
-        { 
-            label: 'Win %', 
-            value: `${(stats?.winRate || 0).toFixed(1)}%`, 
-            trend: (stats?.winRate || 0) > 50 ? 'up' : 'down', 
+        {
+            label: 'Win %',
+            value: `${(stats?.winRate || 0).toFixed(1)}%`,
+            trend: (stats?.winRate || 0) > 50 ? 'up' : 'down',
             subType: `${stats?.winningEvents || 0}/${stats?.totalEvents || 0}`,
             tooltip: (
                 <div>
@@ -150,8 +173,8 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
                             <AreaChart data={distributionData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <Tooltip
@@ -170,7 +193,7 @@ export function AnalyticsMatrix({ data, stats }: AnalyticsMatrixProps) {
                                 <Area
                                     type="monotone"
                                     dataKey="count"
-                                    stroke="#6366f1"
+                                    stroke="#2563eb"
                                     strokeWidth={2}
                                     fillOpacity={1}
                                     fill="url(#colorCount)"

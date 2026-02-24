@@ -3,10 +3,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   CalendarDays, TrendingUp, Download, Settings2,
   ChevronDown, RefreshCw, HelpCircle, Zap, BarChart3,
-  Layers, LineChart, Calendar
+  Layers, LineChart, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { createChart, ColorType } from 'lightweight-charts';
 import { AreaChart, Area, XAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -14,25 +14,25 @@ import { AreaChart, Area, XAxis, Tooltip as RechartsTooltip, ResponsiveContainer
 import { analysisApi } from '@/lib/api';
 import { useAnalysisStore } from '@/store/analysisStore';
 import { useChartSelectionStore } from '@/store/chartSelectionStore';
-import { ReturnBarChart, AggregateChart, CumulativeChartWithDragSelect } from '@/components/charts';
+import { ReturnBarChart, AggregateChart } from '@/components/charts';
 import { WeeklyDataTable } from '@/components/charts/WeeklyDataTable';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn, TAB_COLORS } from '@/lib/utils';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
 
-import { 
-  SymbolSelector, 
-  DateRangePicker, 
-  YearFilters, 
-  MonthFilters, 
+import {
+  SymbolSelector,
+  DateRangePicker,
+  YearFilters,
+  MonthFilters,
   WeekFilters,
   SpecialDaysFilter,
   WeeklySuperimposedChartFilter
 } from '@/components/filters';
 
-const PRIMARY_COLOR = '#f59e0b';
+const TAB_COLOR = TAB_COLORS.weekly;
 
 // Info Tooltip Component
 function InfoTooltip({ content }: { content: string }) {
@@ -60,7 +60,7 @@ function InfoTooltip({ content }: { content: string }) {
         className="ml-1.5 inline-flex items-center justify-center"
         type="button"
       >
-        <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-amber-600 transition-colors" />
+        <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-emerald-600 transition-colors" />
       </button>
       <AnimatePresence>
         {isVisible && (
@@ -170,9 +170,9 @@ function WeeklyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={distributionData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                 <defs>
-                <linearGradient id="colorCountWeekly" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  <linearGradient id="colorCountWeekly" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <RechartsTooltip
@@ -182,7 +182,7 @@ function WeeklyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
                       return (
                         <div className="bg-slate-900 text-white text-xs p-2 rounded shadow-xl border border-slate-800">
                           <p className="font-bold mb-1">Week {payload[0]?.payload?.week}</p>
-                          <p className="text-amber-300">Avg Return: {payload[0]?.payload?.avgReturn?.toFixed(2)}%</p>
+                          <p className="text-emerald-300">Avg Return: {payload[0]?.payload?.avgReturn?.toFixed(2)}%</p>
                           <p className="text-slate-300">Samples: {payload[0]?.payload?.count}</p>
                         </div>
                       );
@@ -194,7 +194,7 @@ function WeeklyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
                 <Area
                   type="monotone"
                   dataKey="avgReturn"
-                  stroke="#f59e0b"
+                  stroke="#06b6d4"
                   strokeWidth={2}
                   fill="url(#colorCountWeekly)"
                 />
@@ -213,7 +213,7 @@ function WeeklyAnalyticsMatrix({ data, stats }: { data: any[]; stats: any }) {
               <div className="flex items-baseline gap-1">
                 <span className={cn(
                   "text-lg font-bold",
-                  metric.trend === 'up' ? "text-amber-600" : metric.trend === 'down' ? "text-rose-600" : "text-slate-800"
+                  metric.trend === 'up' ? "text-emerald-600" : metric.trend === 'down' ? "text-rose-600" : "text-slate-800"
                 )}>
                   {metric.value}
                 </span>
@@ -235,7 +235,9 @@ export default function WeeklyPage() {
   const [aggregateType, setAggregateType] = useState<'total' | 'avg' | 'max' | 'min'>('avg');
   const [aggregateField, setAggregateField] = useState<'weekNumberYearly' | 'weekNumberMonthly'>('weekNumberYearly');
   const [filterOpen, setFilterOpen] = useState(true);
-  
+  const [detailedTablePage, setDetailedTablePage] = useState(1);
+  const detailedTablePageSize = 10;
+
   // Compare mode
   const [compareMode, setCompareMode] = useState(false);
   const [compareSymbol, setCompareSymbol] = useState('');
@@ -243,10 +245,10 @@ export default function WeeklyPage() {
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['weekly-analysis', selectedSymbols, startDate, endDate, filters, weekType, timeRangeSelection.startDate, timeRangeSelection.endDate],
     queryFn: async () => {
-      const dateRange = timeRangeSelection.isActive 
+      const dateRange = timeRangeSelection.isActive
         ? { startDate: timeRangeSelection.startDate || startDate, endDate: timeRangeSelection.endDate || endDate }
         : { startDate, endDate };
-      
+
       const response = await analysisApi.weekly({
         symbol: selectedSymbols[0],
         startDate: dateRange.startDate,
@@ -298,28 +300,59 @@ export default function WeeklyPage() {
   const symbolData = data?.[selectedSymbols[0]];
   const stats = symbolData?.statistics;
 
-  // Filter data by day range if active (for superimposed chart selection)
-  const filteredChartData = useMemo(() => {
-    if (!symbolData?.chartData) return [];
-    
+  // Filter tableData by week range if active (for superimposed chart selection)
+  // tableData has weekNumberYearly/weekNumberMonthly, chartData does not
+  const filteredTableData = useMemo(() => {
+    if (!symbolData?.tableData) return [];
+
     // If no selection, return all data
     if (!dayRangeSelection.isActive) {
-      return symbolData.chartData;
+      return symbolData.tableData;
     }
-    
-    // Filter by week number range
+
+    // Filter by week number range based on chartType
     const startWeek = dayRangeSelection.startDay ?? 1;
     const endWeek = dayRangeSelection.endDay ?? 52;
-    
-    return symbolData.chartData.filter((d: any) => {
-      const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+    const chartType = dayRangeSelection.chartType || filters.weeklySuperimposedChartType || 'YearlyWeeks';
+
+    return symbolData.tableData.filter((d: any) => {
+      const weekNum = chartType === 'MonthlyWeeks'
+        ? (d.weekNumberMonthly || 0)
+        : (d.weekNumberYearly || 0);
       return weekNum >= startWeek && weekNum <= endWeek;
     });
-  }, [symbolData?.chartData, dayRangeSelection.isActive, dayRangeSelection.startDay, dayRangeSelection.endDay]);
+  }, [symbolData?.tableData, dayRangeSelection.isActive, dayRangeSelection.startDay, dayRangeSelection.endDay, dayRangeSelection.chartType, filters.weeklySuperimposedChartType]);
 
-  // Prepare chart data using filtered data - recalculate cumulative from filtered subset
+  // Filtered stats based on day range selection
+  const filteredStats = useMemo(() => {
+    if (!dayRangeSelection.isActive || filteredTableData.length === 0) {
+      return stats;
+    }
+
+    const returns = filteredTableData.map((d: any) => d.returnPercentage || 0);
+    if (returns.length === 0) return stats;
+
+    const totalCount = returns.length;
+    const positiveCount = returns.filter((r: number) => r > 0).length;
+    const negativeCount = returns.filter((r: number) => r < 0).length;
+    const winRate = (positiveCount / totalCount) * 100;
+    const avgReturnAll = returns.reduce((a: number, b: number) => a + b, 0) / totalCount;
+    const sumReturnAll = returns.reduce((a: number, b: number) => a + b, 0);
+
+    return {
+      ...stats,
+      totalCount,
+      positiveCount,
+      negativeCount,
+      winRate,
+      avgReturnAll,
+      sumReturnAll,
+    };
+  }, [stats, filteredTableData, dayRangeSelection.isActive]);
+
+  // Prepare cumulative chart data from filtered tableData
   const cumulativeData = useMemo(() => {
-    const data = filteredChartData;
+    const data = filteredTableData;
     if (!data || !data.length) return [];
     let cumulative = 100;
     return data.map((point: any) => {
@@ -331,32 +364,35 @@ export default function WeeklyPage() {
         cumulative: Number(cumulative.toFixed(4)),
       };
     });
-  }, [filteredChartData]);
+  }, [filteredTableData]);
 
-  // Filter comparison data by day range if active
-  const filteredCompareChartData = useMemo(() => {
-    if (!compareSymbolData?.chartData) return [];
-    
+  // Filter comparison tableData by week range if active
+  const filteredCompareTableData = useMemo(() => {
+    if (!compareSymbolData?.tableData) return [];
+
     // If no selection, return all data
     if (!dayRangeSelection.isActive) {
-      return compareSymbolData.chartData;
+      return compareSymbolData.tableData;
     }
-    
-    // Filter by week number range
+
+    // Filter by week number range based on chartType
     const startWeek = dayRangeSelection.startDay ?? 1;
     const endWeek = dayRangeSelection.endDay ?? 52;
-    
-    return compareSymbolData.chartData.filter((d: any) => {
-      const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+    const chartType = dayRangeSelection.chartType || filters.weeklySuperimposedChartType || 'YearlyWeeks';
+
+    return compareSymbolData.tableData.filter((d: any) => {
+      const weekNum = chartType === 'MonthlyWeeks'
+        ? (d.weekNumberMonthly || 0)
+        : (d.weekNumberYearly || 0);
       return weekNum >= startWeek && weekNum <= endWeek;
     });
-  }, [compareSymbolData?.chartData, dayRangeSelection.isActive, dayRangeSelection.startDay, dayRangeSelection.endDay]);
+  }, [compareSymbolData?.tableData, dayRangeSelection.isActive, dayRangeSelection.startDay, dayRangeSelection.endDay, dayRangeSelection.chartType, filters.weeklySuperimposedChartType]);
 
-  // Compare cumulative data - recalculate cumulative from filtered subset
+  // Compare cumulative data - recalculate cumulative from filtered tableData
   const compareCumulativeData = useMemo(() => {
-    if (!filteredCompareChartData.length) return [];
+    if (!filteredCompareTableData.length) return [];
     let cumulative = 100;
-    return filteredCompareChartData.map((point: any) => {
+    return filteredCompareTableData.map((point: any) => {
       const returnPct = point.returnPercentage || 0;
       cumulative = cumulative * (1 + returnPct / 100);
       return {
@@ -365,18 +401,20 @@ export default function WeeklyPage() {
         cumulative: Number(cumulative.toFixed(4)),
       };
     });
-  }, [filteredCompareChartData]);
+  }, [filteredCompareTableData]);
 
   // Pattern Returns - shows different data based on drag selection state
   // Default: Weekly number average, With drag: Yearly pattern returns
   const patternReturnsData = useMemo(() => {
-    const sourceData = dayRangeSelection.isActive ? filteredChartData : symbolData?.chartData || [];
+    const sourceData = dayRangeSelection.isActive ? filteredTableData : symbolData?.tableData || [];
     if (!sourceData.length) return [];
+
+    const chartType = filters.weeklySuperimposedChartType || 'YearlyWeeks';
 
     if (dayRangeSelection.isActive) {
       // With drag select: show yearly pattern returns
       const yearlyGroups: Record<string, { returns: number[]; sum: number; count: number }> = {};
-      
+
       sourceData.forEach((d: any) => {
         const year = new Date(d.date).getFullYear().toString();
         if (!yearlyGroups[year]) {
@@ -398,9 +436,11 @@ export default function WeeklyPage() {
     } else {
       // Default: show weekly number average returns (exclude week 0)
       const weekGroups: Record<number, { returns: number[]; sum: number; count: number }> = {};
-      
+
       sourceData.forEach((d: any) => {
-        const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+        const weekNum = chartType === 'MonthlyWeeks'
+          ? (d.weekNumberMonthly || 0)
+          : (d.weekNumberYearly || 0);
         // Skip week 0 as it's not a valid week
         if (weekNum === 0) return;
         if (!weekGroups[weekNum]) {
@@ -419,17 +459,19 @@ export default function WeeklyPage() {
         weekLabel: weekNum,
       }));
     }
-  }, [symbolData?.chartData, filteredChartData, dayRangeSelection.isActive]);
+  }, [symbolData?.tableData, filteredTableData, dayRangeSelection.isActive, filters.weeklySuperimposedChartType]);
 
   // Compare pattern returns data - same logic as main symbol
   const comparePatternReturnsData = useMemo(() => {
-    const compareSourceData = dayRangeSelection.isActive ? filteredCompareChartData : compareSymbolData?.chartData || [];
+    const compareSourceData = dayRangeSelection.isActive ? filteredCompareTableData : compareSymbolData?.tableData || [];
     if (!compareSourceData.length) return [];
+
+    const chartType = filters.weeklySuperimposedChartType || 'YearlyWeeks';
 
     if (dayRangeSelection.isActive) {
       // With drag select: show yearly pattern returns
       const yearlyGroups: Record<string, { returns: number[]; sum: number; count: number }> = {};
-      
+
       compareSourceData.forEach((d: any) => {
         const year = new Date(d.date).getFullYear().toString();
         if (!yearlyGroups[year]) {
@@ -451,9 +493,11 @@ export default function WeeklyPage() {
     } else {
       // Default: show weekly number average returns (exclude week 0)
       const weekGroups: Record<number, { returns: number[]; sum: number; count: number }> = {};
-      
+
       compareSourceData.forEach((d: any) => {
-        const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+        const weekNum = chartType === 'MonthlyWeeks'
+          ? (d.weekNumberMonthly || 0)
+          : (d.weekNumberYearly || 0);
         // Skip week 0 as it's not a valid week
         if (weekNum === 0) return;
         if (!weekGroups[weekNum]) {
@@ -472,20 +516,20 @@ export default function WeeklyPage() {
         weekLabel: weekNum,
       }));
     }
-  }, [compareSymbolData?.chartData, filteredCompareChartData, dayRangeSelection.isActive]);
+  }, [compareSymbolData?.tableData, filteredCompareTableData, dayRangeSelection.isActive, filters.weeklySuperimposedChartType]);
 
   // Aggregate data for aggregate chart mode - grouped by week number
   const aggregateData = useMemo(() => {
     if (!symbolData?.tableData) return [];
-    
+
     const weekGroups: Record<number, number[]> = {};
-    
+
     symbolData.tableData.forEach((d: any) => {
       const weekNum = d[aggregateField] || 0;
       if (!weekGroups[weekNum]) weekGroups[weekNum] = [];
       weekGroups[weekNum].push(d.returnPercentage || 0);
     });
-    
+
     const sortedWeeks = Object.keys(weekGroups).map(Number).sort((a, b) => a - b);
     return sortedWeeks.map(week => {
       const values = weekGroups[week] || [];
@@ -495,7 +539,7 @@ export default function WeeklyPage() {
       const min = values.length > 0 ? Math.min(...values) : 0;
       const posCount = values.filter(v => v > 0).length;
       const negCount = values.filter(v => v <= 0).length;
-      
+
       return {
         field: week,
         total,
@@ -513,14 +557,18 @@ export default function WeeklyPage() {
 
   // Transform raw table data into weekly statistics format
   const weeklyStatisticsData = useMemo(() => {
-    if (!symbolData?.tableData || symbolData.tableData.length === 0) return [];
+    // Use filtered data when selection is active
+    const tableData = dayRangeSelection.isActive ? filteredTableData : (symbolData?.tableData || []);
+    if (!tableData || tableData.length === 0) return [];
 
-    const tableData = symbolData.tableData;
+    const chartType = filters.weeklySuperimposedChartType || 'YearlyWeeks';
     const weekGroups: Record<number, number[]> = {};
 
-    // Group returns by week number
+    // Group returns by week number based on chartType
     tableData.forEach((d: any) => {
-      const weekNum = d.weekNumberYearly || d.weekNumberMonthly || 0;
+      const weekNum = chartType === 'MonthlyWeeks'
+        ? (d.weekNumberMonthly || 0)
+        : (d.weekNumberYearly || 0);
       if (!weekGroups[weekNum]) weekGroups[weekNum] = [];
       weekGroups[weekNum].push(d.returnPercentage || 0);
     });
@@ -559,7 +607,102 @@ export default function WeeklyPage() {
         sumReturnNeg,
       };
     }).sort((a, b) => a.week - b.week);
-  }, [symbolData?.tableData]);
+  }, [symbolData?.tableData, filteredTableData, dayRangeSelection.isActive, filters.weeklySuperimposedChartType]);
+
+  // Detailed Year-MonthWeek table data (like old software)
+  const detailedYearMonthWeekData = useMemo(() => {
+    const tableData = dayRangeSelection.isActive ? filteredTableData : (symbolData?.tableData || []);
+    if (!tableData || tableData.length === 0) return { rows: [] as any[], columns: [] as string[] };
+
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+
+    // Group by year, then by month-week
+    const yearGroups: Record<number, Record<string, { return: number; date: string }>> = {};
+
+    tableData.forEach((d: any) => {
+      const date = new Date(d.date);
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const weekNum = d.weekNumberMonthly || 1;
+
+      if (!yearGroups[year]) {
+        yearGroups[year] = {};
+      }
+
+      const monthWeekKey = `${monthNames[month]}-Week${weekNum}`;
+      yearGroups[year][monthWeekKey] = {
+        return: d.returnPercentage || 0,
+        date: d.date,
+      };
+    });
+
+    // Get all unique month-week keys for columns
+    const allMonthWeekKeys = new Set<string>();
+    Object.values(yearGroups).forEach(yearData => {
+      Object.keys(yearData).forEach(key => allMonthWeekKeys.add(key));
+    });
+
+    // Sort month-week keys
+    const sortedMonthWeekKeys = Array.from(allMonthWeekKeys).sort((a, b) => {
+      const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      const [monthA, weekA] = a.split('-Week');
+      const [monthB, weekB] = b.split('-Week');
+      const monthIdxA = monthOrder.indexOf(monthA);
+      const monthIdxB = monthOrder.indexOf(monthB);
+      if (monthIdxA !== monthIdxB) return monthIdxA - monthIdxB;
+      return parseInt(weekA) - parseInt(weekB);
+    });
+
+    // Calculate yearly totals
+    const years = Object.keys(yearGroups).map(Number).sort((a, b) => b - a);
+
+    const rows = years.map(year => {
+      const yearData = yearGroups[year];
+      let totalReturn = 0;
+      let count = 0;
+
+      const weekReturns: Record<string, number> = {};
+      Object.entries(yearData).forEach(([key, data]) => {
+        weekReturns[key] = data.return;
+        totalReturn += data.return;
+        count++;
+      });
+
+      return {
+        year,
+        ...weekReturns,
+        total: totalReturn,
+        count,
+      };
+    });
+
+    // Calculate column totals (each week's total across all years)
+    const columnTotals: Record<string, number> = {};
+    let grandTotal = 0;
+
+    sortedMonthWeekKeys.forEach((col: string) => {
+      let sum = 0;
+      rows.forEach((row: any) => {
+        if (row[col] !== undefined) {
+          sum += row[col];
+        }
+      });
+      columnTotals[col] = sum;
+      grandTotal += sum;
+    });
+
+    // Add totals row
+    const totalsRow = {
+      year: 'Total',
+      ...columnTotals,
+      total: grandTotal,
+      isTotalsRow: true,
+    };
+
+    return { rows: [...rows, totalsRow], columns: sortedMonthWeekKeys };
+  }, [symbolData?.tableData, filteredTableData, dayRangeSelection.isActive]);
 
   return (
     <div className="flex h-full bg-[#F8F9FB]">
@@ -568,9 +711,9 @@ export default function WeeklyPage() {
         {/* Top Header */}
         <header className="flex-shrink-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div 
+            <div
               className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
-              style={{ backgroundColor: PRIMARY_COLOR }}
+              style={{ backgroundColor: TAB_COLOR.accent }}
             >
               <CalendarDays className="h-5 w-5" />
             </div>
@@ -595,9 +738,9 @@ export default function WeeklyPage() {
               <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               Analyze
             </Button>
-            <div 
+            <div
               className="h-10 w-10 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm"
-              style={{ backgroundColor: PRIMARY_COLOR }}
+              style={{ backgroundColor: TAB_COLOR.accent }}
             >
               {selectedSymbols[0]?.charAt(0) || 'N'}
             </div>
@@ -608,7 +751,7 @@ export default function WeeklyPage() {
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Stats Strip */}
           {stats && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
@@ -616,54 +759,54 @@ export default function WeeklyPage() {
             >
               <StatCard
                 label="TOTAL WEEKS"
-                value={stats.totalCount?.toString() || '0'}
+                value={(dayRangeSelection.isActive ? filteredStats : stats)?.totalCount?.toString() || '0'}
                 trend="neutral"
-                subValue={`${stats.positiveCount || 0} positive`}
+                subValue={`${(dayRangeSelection.isActive ? filteredStats : stats)?.positiveCount || 0} positive`}
                 metricKey="totalCount"
                 compareValue={compareMode && compareSymbolData?.statistics ? (compareSymbolData.statistics.totalCount || 0).toString() : undefined}
                 compareLabel={compareSymbol}
               />
               <StatCard
                 label="WIN RATE"
-                value={`${(stats.winRate || 0).toFixed(1)}%`}
-                trend={(stats.winRate || 0) > 50 ? 'up' : 'down'}
-                subValue={`${stats.positiveCount || 0} wins`}
+                value={`${((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0).toFixed(1)}%`}
+                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0) > 50 ? 'up' : 'down'}
+                subValue={`${(dayRangeSelection.isActive ? filteredStats : stats)?.positiveCount || 0} wins`}
                 metricKey="winRate"
-                compareValue={compareMode && compareSymbolData?.statistics ? 
-                  `${((compareSymbolData.statistics.winRate || 0) - (stats.winRate || 0)) > 0 ? '+' : ''}${(compareSymbolData.statistics.winRate || 0 - (stats.winRate || 0)).toFixed(1)}%` 
+                compareValue={compareMode && compareSymbolData?.statistics ?
+                  `${((compareSymbolData.statistics.winRate || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0)) > 0 ? '+' : ''}${((compareSymbolData.statistics.winRate || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.winRate || 0)).toFixed(1)}%`
                   : undefined}
                 compareLabel={compareSymbol}
               />
               <StatCard
                 label="AVG RETURN"
-                value={`${(stats.avgReturnAll || 0).toFixed(2)}%`}
-                trend={(stats.avgReturnAll || 0) >= 0 ? 'up' : 'down'}
-                subValue={`Median: ${((stats.sumReturnAll || 0) / (stats.totalCount || 1)).toFixed(2)}%`}
+                value={`${((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturnAll || 0).toFixed(2)}%`}
+                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturnAll || 0) >= 0 ? 'up' : 'down'}
+                subValue={`Median: ${(((dayRangeSelection.isActive ? filteredStats : stats)?.sumReturnAll || 0) / ((dayRangeSelection.isActive ? filteredStats : stats)?.totalCount || 1)).toFixed(2)}%`}
                 metricKey="avgReturn"
-                compareValue={compareMode && compareSymbolData?.statistics ? 
-                  `${((compareSymbolData.statistics.avgReturnAll || 0) - (stats.avgReturnAll || 0)) > 0 ? '+' : ''}${(compareSymbolData.statistics.avgReturnAll || 0 - (stats.avgReturnAll || 0)).toFixed(2)}%` 
+                compareValue={compareMode && compareSymbolData?.statistics ?
+                  `${((compareSymbolData.statistics.avgReturnAll || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturnAll || 0)) > 0 ? '+' : ''}${((compareSymbolData.statistics.avgReturnAll || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.avgReturnAll || 0)).toFixed(2)}%`
                   : undefined}
                 compareLabel={compareSymbol}
               />
               <StatCard
                 label="CAGR"
-                value={`${(stats.cagr || 0).toFixed(2)}%`}
-                trend={(stats.cagr || 0) > 0 ? 'up' : 'down'}
-                subValue={`Sharpe: ${(stats.sharpeRatio || 0).toFixed(2)}`}
+                value={`${((dayRangeSelection.isActive ? filteredStats : stats)?.cagr || 0).toFixed(2)}%`}
+                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.cagr || 0) > 0 ? 'up' : 'down'}
+                subValue={`Sharpe: ${((dayRangeSelection.isActive ? filteredStats : stats)?.sharpeRatio || 0).toFixed(2)}`}
                 metricKey="cagr"
-                compareValue={compareMode && compareSymbolData?.statistics ? 
-                  `${((compareSymbolData.statistics.cagr || 0) - (stats.cagr || 0)) > 0 ? '+' : ''}${(compareSymbolData.statistics.cagr || 0 - (stats.cagr || 0)).toFixed(2)}%` 
+                compareValue={compareMode && compareSymbolData?.statistics ?
+                  `${((compareSymbolData.statistics.cagr || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.cagr || 0)) > 0 ? '+' : ''}${((compareSymbolData.statistics.cagr || 0) - ((dayRangeSelection.isActive ? filteredStats : stats)?.cagr || 0)).toFixed(2)}%`
                   : undefined}
                 compareLabel={compareSymbol}
               />
               <StatCard
                 label="MAX DD"
-                value={`${Math.abs(stats.maxDrawdown || 0).toFixed(2)}%`}
-                trend={(stats.maxDrawdown || 0) > -10 ? 'up' : 'down'}
-                subValue={`StdDev: ${(stats.stdDev || 0).toFixed(2)}`}
+                value={`${Math.abs((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0).toFixed(2)}%`}
+                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0) > -10 ? 'up' : 'down'}
+                subValue={`StdDev: ${((dayRangeSelection.isActive ? filteredStats : stats)?.stdDev || 0).toFixed(2)}`}
                 metricKey="maxDrawdown"
-                compareValue={compareMode && compareSymbolData?.statistics ? 
-                  `${((stats.maxDrawdown || 0) - (compareSymbolData.statistics.maxDrawdown || 0)) > 0 ? '+' : ''}${(Math.abs(stats.maxDrawdown || 0) - Math.abs(compareSymbolData.statistics.maxDrawdown || 0)).toFixed(2)}%` 
+                compareValue={compareMode && compareSymbolData?.statistics ?
+                  `${(((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0) - (compareSymbolData.statistics.maxDrawdown || 0)) > 0 ? '+' : ''}${(Math.abs((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0) - Math.abs(compareSymbolData.statistics.maxDrawdown || 0)).toFixed(2)}%`
                   : undefined}
                 compareLabel={compareSymbol}
               />
@@ -671,7 +814,7 @@ export default function WeeklyPage() {
           )}
 
           {/* Chart Mode Selector */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
@@ -690,7 +833,7 @@ export default function WeeklyPage() {
                     ? "text-white shadow-md"
                     : "text-slate-600 hover:bg-slate-50"
                 )}
-                style={activeChart === mode.id ? { backgroundColor: PRIMARY_COLOR } : {}}
+                style={activeChart === mode.id ? { backgroundColor: TAB_COLOR.accent } : {}}
               >
                 {mode.label}
               </button>
@@ -699,28 +842,28 @@ export default function WeeklyPage() {
 
           {/* Aggregate Type Selector (only show in aggregate mode) */}
           {activeChart === 'aggregate' && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="flex items-center gap-4"
             >
               <div className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 p-2 shadow-sm">
-                <label className="text-xs font-semibold text-slate-600">Field:</label>
+                <label className="text-sm font-bold text-slate-700">Field:</label>
                 <select
                   value={aggregateField}
                   onChange={(e) => setAggregateField(e.target.value as any)}
-                  className="px-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-amber-400 bg-white"
+                  className="px-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-cyan-400 bg-white"
                 >
                   <option value="weekNumberYearly">Yearly Weeks</option>
                   <option value="weekNumberMonthly">Monthly Weeks</option>
                 </select>
               </div>
               <div className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 p-2 shadow-sm">
-                <label className="text-xs font-semibold text-slate-600">Type:</label>
+                <label className="text-sm font-bold text-slate-700">Type:</label>
                 <select
                   value={aggregateType}
                   onChange={(e) => setAggregateType(e.target.value as any)}
-                  className="px-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-amber-400 bg-white"
+                  className="px-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-cyan-400 bg-white"
                 >
                   <option value="avg">Average</option>
                   <option value="total">Total</option>
@@ -732,7 +875,7 @@ export default function WeeklyPage() {
           )}
 
           {/* Main Chart */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
@@ -772,7 +915,7 @@ export default function WeeklyPage() {
           </motion.div>
 
           {/* Secondary Panels - Cumulative & Pattern Returns */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.3 }}
@@ -783,18 +926,18 @@ export default function WeeklyPage() {
               <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-slate-800 text-sm">Cumulative Returns</h3>
-                  <InfoTooltip content="Shows cumulative returns over time. Drag on chart to filter a specific range." />
+                  <InfoTooltip content="Shows cumulative returns over time. Select a week range in the Superimposed chart to filter this data." />
                 </div>
               </div>
               <div className="flex-1 w-full p-4 relative">
-                {symbolData?.chartData?.length > 0 ? (
-                  <CumulativeChartWithDragSelect
+                {cumulativeData.length > 0 ? (
+                  <CumulativeChart
                     key={`cumulative-${dayRangeSelection.isActive}-${dayRangeSelection.startDay}-${dayRangeSelection.endDay}`}
                     data={cumulativeData}
                     chartScale="linear"
-                    chartColor="#f59e0b"
+                    chartColor="#06b6d4"
                     compareData={compareMode && compareCumulativeData.length > 0 ? compareCumulativeData : undefined}
-                    compareColor="#dc2626"
+                    compareColor="#003b45ff"
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-xs">No Data</div>
@@ -809,9 +952,9 @@ export default function WeeklyPage() {
                   <h3 className="font-bold text-slate-800 text-sm">
                     {dayRangeSelection.isActive ? 'Yearly Pattern Returns' : 'Avg Return By Weeks (%)'}
                   </h3>
-                  <InfoTooltip content={dayRangeSelection.isActive 
-                    ? "The bars show the gains and losses generated by the selected pattern in every single year of the time period under review." 
-                    : "Average return for each week number across all years in the selected time period."} 
+                  <InfoTooltip content={dayRangeSelection.isActive
+                    ? "The bars show the gains and losses generated by the selected pattern in every single year of the time period under review."
+                    : "Average return for each week number across all years in the selected time period."}
                   />
                 </div>
               </div>
@@ -822,10 +965,10 @@ export default function WeeklyPage() {
                     data={patternReturnsData}
                     symbol={selectedSymbols[0]}
                     config={{ title: '', height: 240 }}
-                    color="#f59e0b"
+                    color="#06b6d4"
                     compareData={compareMode && comparePatternReturnsData.length > 0 ? comparePatternReturnsData : undefined}
                     compareSymbol={compareMode ? compareSymbol : undefined}
-                    compareColor="#dc2626"
+                    compareColor="#003b45ff"
                     chartLabel={dayRangeSelection.isActive ? 'year' : 'week'}
                   />
                 ) : (
@@ -835,7 +978,7 @@ export default function WeeklyPage() {
             </div>
           </motion.div>
 
-          {/* DATA TABLE */}
+          {/* DATA TABLE - Weekly Statistics */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -843,6 +986,181 @@ export default function WeeklyPage() {
             className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
           >
             <WeeklyDataTable data={weeklyStatisticsData} title={`${selectedSymbols[0] || 'Symbol'} - Weekly Statistics`} />
+          </motion.div>
+
+          {/* DATA TABLE - Detailed Year-MonthWeek Returns */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.4 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+          >
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 text-sm">Detailed Year-MonthWeek Returns</h3>
+                <InfoTooltip content="Shows individual week returns organized by year. Each column represents a Month-Week combination (e.g., January-Week1)." />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!detailedYearMonthWeekData.rows.length) return;
+                  const headers = ['Year', ...detailedYearMonthWeekData.columns, 'Total'];
+                  const rows = detailedYearMonthWeekData.rows.map((row: any) => [
+                    row.year,
+                    ...detailedYearMonthWeekData.columns.map((col: string) => (row[col]?.toFixed(2) ?? '')),
+                    row.total?.toFixed(2) ?? 0,
+                  ]);
+                  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `detailed-year-monthweek-returns.csv`;
+                  a.click();
+                }}
+                className="text-xs"
+              >
+                <Download className="h-3.5 w-3.5 mr-1" />
+                Export
+              </Button>
+            </div>
+            {(() => {
+              const allRows = detailedYearMonthWeekData.rows;
+              const totalsRow = allRows.find((r: any) => r.isTotalsRow);
+              const yearRows = allRows.filter((r: any) => !r.isTotalsRow);
+
+              const totalPages = Math.ceil(yearRows.length / detailedTablePageSize);
+              const startIndex = (detailedTablePage - 1) * detailedTablePageSize;
+              const endIndex = startIndex + detailedTablePageSize;
+              const paginatedRows = yearRows.slice(startIndex, endIndex);
+
+              return (
+                <>
+                  <div className="overflow-x-auto">
+                    {allRows.length > 0 ? (
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-700 border-b border-slate-200 bg-slate-50 min-w-[60px]">Year</th>
+                            {detailedYearMonthWeekData.columns.map((col: string) => (
+                              <th key={col} className="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 whitespace-nowrap min-w-[70px]">
+                                <div className="text-[10px] text-slate-400">{col.split('-Week')[0]}</div>
+                                <div>W{col.split('-Week')[1]}</div>
+                              </th>
+                            ))}
+                            <th className="px-3 py-2 text-right font-semibold text-slate-700 border-b border-slate-200 bg-emerald-50 min-w-[60px]">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {paginatedRows.map((row: any) => (
+                            <tr key={row.year} className="hover:bg-slate-50/50">
+                              <td className="px-3 py-1.5 font-semibold bg-white text-slate-900">{row.year}</td>
+                              {detailedYearMonthWeekData.columns.map((col: string) => {
+                                const value = row[col];
+                                return (
+                                  <td key={col} className={cn(
+                                    "px-2 py-1.5 text-right font-medium",
+                                    value > 0 ? "text-green-600" : value < 0 ? "text-red-600" : "text-slate-400"
+                                  )}>
+                                    {value !== undefined ? value.toFixed(2) : '-'}
+                                  </td>
+                                );
+                              })}
+                              <td className={cn(
+                                "px-3 py-1.5 text-right font-bold bg-emerald-50/50",
+                                row.total > 0 ? "text-green-600" : row.total < 0 ? "text-red-600" : "text-slate-600"
+                              )}>
+                                {row.total?.toFixed(2) ?? 0}
+                              </td>
+                            </tr>
+                          ))}
+                          {totalsRow && (
+                            <tr className="bg-emerald-50/70 font-bold border-t-2 border-emerald-200">
+                              <td className="px-3 py-1.5 font-semibold bg-emerald-50/70 text-emerald-700">{totalsRow.year}</td>
+                              {detailedYearMonthWeekData.columns.map((col: string) => {
+                                const value = totalsRow[col];
+                                return (
+                                  <td key={col} className={cn(
+                                    "px-2 py-1.5 text-right font-medium bg-emerald-50/30",
+                                    value > 0 ? "text-green-600" : value < 0 ? "text-red-600" : "text-slate-400"
+                                  )}>
+                                    {value !== undefined ? value.toFixed(2) : '-'}
+                                  </td>
+                                );
+                              })}
+                              <td className={cn(
+                                "px-3 py-1.5 text-right font-bold bg-[#06b6d4]-100 text-[#06b6d4]-800",
+                                totalsRow.total > 0 ? "text-green-600" : totalsRow.total < 0 ? "text-red-600" : "text-slate-600"
+                              )}>
+                                {totalsRow.total?.toFixed(2) ?? 0}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="p-8 text-center text-slate-400 text-sm">No detailed data available</div>
+                    )}
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="px-5 py-3 border-t-2 border-slate-200 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-700">
+                        Showing <span className="text-[#06b6d4]-600">{startIndex + 1}-{Math.min(endIndex, yearRows.length)}</span> of {yearRows.length} years
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-[#06b6d4]-400 hover:bg-[#06b6d4]-50 disabled:opacity-40"
+                          onClick={() => setDetailedTablePage(1)}
+                          disabled={detailedTablePage === 1}
+                        >
+                          <ChevronsLeft className="h-5 w-5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-[#06b6d4]-400 hover:bg-[#06b6d4]-50 disabled:opacity-40"
+                          onClick={() => setDetailedTablePage(p => Math.max(1, p - 1))}
+                          disabled={detailedTablePage === 1}
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </Button>
+                        <span className="px-4 py-2 text-sm font-bold text-slate-800 bg-[#06b6d4]-50 rounded-lg border-2 border-[#06b6d4]-200">
+                          {detailedTablePage} <span className="text-slate-500 font-normal">/</span> {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-[#06b6d4]-400 hover:bg-[#06b6d4]-50 disabled:opacity-40"
+                          onClick={() => setDetailedTablePage(p => Math.min(totalPages, p + 1))}
+                          disabled={detailedTablePage === totalPages}
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 p-0 font-bold border-2 border-slate-300 hover:border-[#06b6d4]-400 hover:bg-[#06b6d4]-50 disabled:opacity-40"
+                          onClick={() => setDetailedTablePage(totalPages)}
+                          disabled={detailedTablePage === totalPages}
+                        >
+                          <ChevronsRight className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="px-5 py-3 border-t border-slate-200 bg-slate-50/50 text-sm font-semibold text-slate-700 flex items-center justify-between">
+                    <span>{yearRows.length} years of data</span>
+                    <span>{detailedYearMonthWeekData.columns.length} week columns</span>
+                  </div>
+                </>
+              );
+            })()}
           </motion.div>
         </div>
       </div>
@@ -856,22 +1174,22 @@ export default function WeeklyPage() {
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"
-        primaryColor={PRIMARY_COLOR}
+        primaryColor={TAB_COLOR.accent}
       >
         {/* Market Context */}
-        <FilterSection 
-          title="Market Context" 
+        <FilterSection
+          title="Market Context"
           defaultOpen
           icon={<BarChart3 className="h-3.5 w-3.5" />}
           delay={0}
         >
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Asset Class</label>
+              <label className="text-sm font-bold text-slate-700 mb-2 block">Asset Class</label>
               <SymbolSelector />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Week Type</label>
+              <label className="text-sm font-bold text-slate-700 mb-2 block">Week Type</label>
               <Select value={weekType} onValueChange={(v) => setWeekType(v as 'monday' | 'expiry')}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -886,8 +1204,8 @@ export default function WeeklyPage() {
         </FilterSection>
 
         {/* Compare */}
-        <FilterSection 
-          title="Compare" 
+        <FilterSection
+          title="Compare"
           defaultOpen
           icon={<TrendingUp className="h-3.5 w-3.5" />}
           delay={0.02}
@@ -902,18 +1220,18 @@ export default function WeeklyPage() {
                   setCompareMode(e.target.checked);
                   if (!e.target.checked) setCompareSymbol('');
                 }}
-                className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
               />
               <label htmlFor="compareMode" className="text-sm text-slate-700">Enable comparison</label>
             </div>
-            
+
             {compareMode && (
               <div className="space-y-2">
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Compare Symbol</label>
                 <select
                   value={compareSymbol}
                   onChange={(e) => setCompareSymbol(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 bg-white"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 bg-white"
                 >
                   <option value="">Select symbol to compare</option>
                   {availableSymbols.map((symbol: { symbol: string; name: string }) => (
@@ -928,8 +1246,8 @@ export default function WeeklyPage() {
         </FilterSection>
 
         {/* Time Ranges */}
-        <FilterSection 
-          title="Time Ranges" 
+        <FilterSection
+          title="Time Ranges"
           defaultOpen
           icon={<Calendar className="h-3.5 w-3.5" />}
           delay={0.05}
@@ -938,8 +1256,8 @@ export default function WeeklyPage() {
         </FilterSection>
 
         {/* Temporal Filters */}
-        <FilterSection 
-          title="Temporal Filters" 
+        <FilterSection
+          title="Temporal Filters"
           icon={<Layers className="h-3.5 w-3.5" />}
           badge={3}
           delay={0.1}
@@ -952,8 +1270,8 @@ export default function WeeklyPage() {
         </FilterSection>
 
         {/* Advanced Filters */}
-        <FilterSection 
-          title="Advanced Filters" 
+        <FilterSection
+          title="Advanced Filters"
           icon={<LineChart className="h-3.5 w-3.5" />}
           delay={0.15}
         >
@@ -981,10 +1299,9 @@ function StatCard({ label, value, subValue, trend, metricKey, color, compareValu
   compareLabel?: string;
 }) {
   const metricDef = metricKey ? METRIC_DEFINITIONS[metricKey] : undefined;
-  const trendColor = color || (trend === 'up' ? '#f59e0b' : trend === 'down' ? '#dc2626' : undefined);
-  
+
   return (
-    <motion.div 
+    <motion.div
       whileHover={{ y: -2 }}
       transition={{ duration: 0.2 }}
       className="bg-white rounded-xl p-5 border border-slate-200 hover:border-slate-300 transition-colors shadow-sm hover:shadow-md"
@@ -995,15 +1312,10 @@ function StatCard({ label, value, subValue, trend, metricKey, color, compareValu
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
-          <div className="text-2xl font-bold text-slate-900">{value}</div>
-          {trend && trend !== 'neutral' && (
-            <div className={cn(
-              "text-xs font-bold",
-              trend === 'up' ? "text-amber-600" : "text-rose-600"
-            )}>
-              {trend === 'up' ? '↗' : '↘'}
-            </div>
-          )}
+          <div className={cn(
+            "text-2xl font-bold",
+            trend === 'up' ? "text-emerald-600" : trend === 'down' ? "text-red-600" : "text-slate-900"
+          )}>{value}</div>
         </div>
         {compareValue && compareLabel && (
           <div className="text-[10px] font-semibold text-red-500 mt-0.5">
@@ -1021,8 +1333,8 @@ function StatCard({ label, value, subValue, trend, metricKey, color, compareValu
 }
 
 // Superimposed Chart Component with Drag Select
-function SuperimposedChart({ data, symbol, compareData, compareSymbol }: { 
-  data: any[]; 
+function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
+  data: any[];
   symbol: string;
   compareData?: any[];
   compareSymbol?: string;
@@ -1034,7 +1346,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
   const [selection, setSelection] = useState<{ startWeek: number | null; endWeek: number | null; isDragging: boolean }>({ startWeek: null, endWeek: null, isDragging: false });
   const { filters } = useAnalysisStore();
   const { setDayRangeSelection, clearDayRangeSelection } = useChartSelectionStore();
-  
+
   const weeklySuperimposedChartType = filters.weeklySuperimposedChartType || 'YearlyWeeks';
   const electionChartTypes = filters.electionChartTypes || ['All Years'];
 
@@ -1051,12 +1363,12 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
     if (!data || data.length === 0) return [];
 
     let filteredData = [...data];
-    
+
     if (!electionChartTypes.includes('All Years')) {
       filteredData = data.filter((d: any) => {
         const year = d.year || new Date(d.weekStartDate || d.date).getFullYear();
         const currentYear = new Date().getFullYear();
-        
+
         return electionChartTypes.some(type => {
           if (type === 'Current Year') {
             return year === currentYear;
@@ -1070,7 +1382,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
 
     const weekGroups: Record<number, number[]> = {};
     const groupByField = weeklySuperimposedChartType === 'YearlyWeeks' ? 'weekNumberYearly' : 'weekNumberMonthly';
-    
+
     filteredData.forEach((d: any) => {
       const weekNum = d[groupByField] || 0;
       // Skip week 0
@@ -1083,11 +1395,11 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
 
     const sortedWeeks = Object.keys(weekGroups).map(Number).sort((a, b) => a - b);
     let compoundedValue = 1;
-    
+
     return sortedWeeks.map(weekNum => {
       const avgReturn = weekGroups[weekNum].reduce((sum, val) => sum + val, 0) / weekGroups[weekNum].length;
       compoundedValue = compoundedValue * (1 + avgReturn / 100);
-      
+
       return {
         weekNumber: weekNum,
         avgReturn,
@@ -1114,12 +1426,12 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
         mode: 1,
         vertLine: {
           width: 1,
-          color: '#f59e0b',
+          color: '#06b6d4',
           style: 2,
         },
         horzLine: {
           width: 1,
-          color: '#f59e0b',
+          color: '#06b6d4',
           style: 2,
         },
       },
@@ -1134,9 +1446,9 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
     chartRef.current = chart;
 
     const areaSeries = chart.addAreaSeries({
-      lineColor: '#000000',
-      topColor: 'rgba(224, 231, 255, 0.4)',
-      bottomColor: 'rgba(224, 231, 255, 0.0)',
+      lineColor: '#06b6d4',
+      topColor: 'rgba(37, 99, 235, 0.35)',
+      bottomColor: 'rgba(37, 99, 235, 0.0)',
       lineWidth: 2,
     });
 
@@ -1153,7 +1465,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
     // Add comparison series if provided
     if (compareData && compareData.length > 0 && compareSymbol) {
       const groupByField = weeklySuperimposedChartType === 'YearlyWeeks' ? 'weekNumberYearly' : 'weekNumberMonthly';
-      
+
       const compareWeekGroups: Record<number, number[]> = {};
       compareData.forEach((d: any) => {
         const weekNum = d[groupByField] || 0;
@@ -1173,7 +1485,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
       });
 
       const compareSeries = chart.addLineSeries({
-        color: '#dc2626',
+        color: '#003b45ff',
         lineWidth: 2,
       });
       compareSeries.setData(compareChartData);
@@ -1195,7 +1507,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
       const dataPoint = param.seriesData.get(areaSeries);
       if (dataPoint) {
         const originalData = superimposedData.find((d: any) => d.weekNumber === param.time);
-        
+
         let compareValue: number | undefined;
         if (compareData && compareData.length > 0) {
           const compareSeriesData = param.seriesData;
@@ -1207,7 +1519,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
             }
           }
         }
-        
+
         setTooltip({
           visible: true,
           x: param.point.x,
@@ -1242,11 +1554,11 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
     if (!chartRef.current) return;
     const rect = chartContainerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
+
     const x = e.clientX - rect.left;
     const timeScale = chartRef.current.timeScale();
     const time = timeScale.coordinateToTime(x);
-    
+
     if (time !== null) {
       setSelection({ startWeek: time as number, endWeek: time as number, isDragging: true });
     }
@@ -1254,14 +1566,14 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!selection.isDragging || !chartRef.current) return;
-    
+
     const rect = chartContainerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
+
     const x = e.clientX - rect.left;
     const timeScale = chartRef.current.timeScale();
     const time = timeScale.coordinateToTime(x);
-    
+
     if (time !== null) {
       setSelection(prev => ({ ...prev, endWeek: time as number }));
     }
@@ -1269,11 +1581,11 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
 
   const handleMouseUp = () => {
     if (!selection.isDragging || !chartRef.current) return;
-    
+
     if (selection.startWeek !== null && selection.endWeek !== null) {
       const minWeek = Math.min(selection.startWeek, selection.endWeek);
       const maxWeek = Math.max(selection.startWeek, selection.endWeek);
-      
+
       setDayRangeSelection({
         startDay: minWeek,
         endDay: maxWeek,
@@ -1281,7 +1593,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
         isActive: true,
       });
     }
-    
+
     setSelection(prev => ({ ...prev, isDragging: false }));
   };
 
@@ -1293,16 +1605,16 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
   // Calculate selection overlay position
   const getSelectionOverlay = () => {
     if (!chartRef.current || selection.startWeek === null || selection.endWeek === null) return null;
-    
+
     const timeScale = chartRef.current.timeScale();
     const startX = timeScale.timeToCoordinate(selection.startWeek);
     const endX = timeScale.timeToCoordinate(selection.endWeek);
-    
+
     if (startX === null || endX === null) return null;
-    
+
     const left = Math.min(startX, endX);
     const width = Math.abs(endX - startX);
-    
+
     return { left, width, display: width > 5 };
   };
 
@@ -1335,8 +1647,8 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
         </div>
       )}
 
-      <div 
-        ref={chartContainerRef} 
+      <div
+        ref={chartContainerRef}
         className={cn("h-full w-full relative", selection.isDragging ? "cursor-col-resize" : "cursor-crosshair")}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -1353,8 +1665,8 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
             style={{
               left: `${selectionOverlay.left}px`,
               width: `${selectionOverlay.width}px`,
-              backgroundColor: 'rgba(245, 158, 11, 0.15)',
-              borderLeft: '2px solid rgba(245, 158, 11, 0.8)',
+              backgroundColor: 'rgba(37, 99, 235, 0.15)',
+              borderLeft: '2px solid rgba(37, 99, 235, 0.8)',
             }}
           />
         )}
@@ -1370,7 +1682,7 @@ function SuperimposedChart({ data, symbol, compareData, compareSymbol }: {
           }}
         >
           <div className="font-semibold text-slate-700 mb-1">Week {tooltip.week}</div>
-          <div className="text-amber-600 font-bold">
+          <div className="text-emerald-600 font-bold">
             {weeklySuperimposedChartType === 'YearlyWeeks' ? 'YTD' : 'MTD'} Return: {tooltip.value.toFixed(2)}%
           </div>
           <div className="text-slate-600">
@@ -1393,7 +1705,7 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
   const chartRef = useRef<any>(null);
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; week: number; values: Array<{ year: string; value: number; color: string }> } | null>(null);
   const { filters } = useAnalysisStore();
-  
+
   const electionChartTypes = filters.electionChartTypes || ['All Years'];
 
   const electionYears = {
@@ -1408,12 +1720,12 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
     if (!chartContainerRef.current || !data || data.length === 0) return;
 
     let filteredData = [...data];
-    
+
     if (!electionChartTypes.includes('All Years')) {
       filteredData = data.filter((d: any) => {
         const year = d.year || new Date(d.weekStartDate || d.date).getFullYear();
         const currentYear = new Date().getFullYear();
-        
+
         return electionChartTypes.some(type => {
           if (type === 'Current Year') {
             return year === currentYear;
@@ -1440,12 +1752,12 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
         mode: 1,
         vertLine: {
           width: 1,
-          color: '#f59e0b',
+          color: '#06b6d4',
           style: 2,
         },
         horzLine: {
           width: 1,
-          color: '#f59e0b',
+          color: '#06b6d4',
           style: 2,
         },
       },
@@ -1466,8 +1778,8 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
     });
 
     const colors = [
-      '#f59e0b', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
-      '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
+      '#06b6d4', '#3b82f6', '#1d4ed8', '#1e40af', '#1e3a8a',
+      '#172554', '#0ea5e9', '#0284c7', '#0369a1', '#075985'
     ];
 
     const seriesMap = new Map();
@@ -1503,7 +1815,7 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
       }
 
       const values: Array<{ year: string; value: number; color: string }> = [];
-      
+
       seriesMap.forEach((info, series) => {
         const dataPoint = param.seriesData.get(series);
         if (dataPoint) {
@@ -1558,8 +1870,8 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
             {tooltip.values.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
+                  <div
+                    className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: item.color }}
                   />
                   <span className="text-slate-600">{item.year}:</span>
@@ -1577,14 +1889,14 @@ function YearlyOverlayChart({ data, symbol }: { data: any[]; symbol: string }) {
 }
 
 // Cumulative Chart - Simple version without drag select for weekly
-function CumulativeChart({ 
-  data, 
+function CumulativeChart({
+  data,
   chartScale = 'linear',
-  chartColor = '#f59e0b',
+  chartColor = '#06b6d4',
   compareData,
-  compareColor = '#dc2626'
-}: { 
-  data: any[]; 
+  compareColor = '#003b45ff'
+}: {
+  data: any[];
   chartScale?: 'linear' | 'log';
   chartColor?: string;
   compareData?: any[];
@@ -1606,8 +1918,8 @@ function CumulativeChart({
       rightPriceScale: {
         borderColor: '#e2e8f0',
       },
-      timeScale: { 
-        timeVisible: true, 
+      timeScale: {
+        timeVisible: true,
         secondsVisible: false,
         borderColor: '#e2e8f0',
       },
@@ -1653,11 +1965,11 @@ function CumulativeChart({
 
       const seriesData = param.seriesData;
       const firstSeries = seriesData.keys().next().value;
-      
+
       if (firstSeries) {
         const dataPoint = seriesData.get(firstSeries);
         const cumulativeValue = dataPoint?.value ?? 0;
-        
+
         let compareValue: number | null = null;
         if (compareData && compareData.length > 0) {
           const compareSeriesKey = seriesData.keys().next().value;
@@ -1666,7 +1978,7 @@ function CumulativeChart({
             compareValue = compareDataPoint?.value ?? null;
           }
         }
-        
+
         const dateStr = new Date(param.time * 1000).toLocaleDateString('en-IN', {
           day: '2-digit',
           month: 'short',

@@ -1327,6 +1327,339 @@ class AnalysisService {
   }
 
   /**
+   * Symbol Scanner - Find symbols with N consecutive trending days
+   */
+  async scanner(params) {
+    const {
+      symbols = [],
+      startDate,
+      endDate,
+      filters = {},
+      trendType = 'Bullish',
+      consecutiveDays = 3,
+      criteria = {}
+    } = params;
+
+    // Extract all filter options
+    const {
+      evenOddYears = 'All',       // All, Even, Odd, Leap
+      specificMonth = 0,          // 0 = All, 1-12 = specific month
+      specificExpiryWeekMonthly = 0, // 0 = All, 1-5 = specific week
+      specificMondayWeekMonthly = 0,  // 0 = All, 1-5 = specific week
+      yearFilters = {},
+      monthFilters = {}
+    } = filters;
+
+    logger.info('Scanner filter extraction:', { yearFilters, monthFilters, evenOddYears });
+
+    const {
+      minAccuracy = 60,
+      minTotalPnl = 1.5,
+      minSampleSize = 50,
+      minAvgPnl = 0.2,
+      operations = { op12: 'OR', op23: 'OR', op34: 'OR' }
+    } = criteria;
+
+    logger.info('Scanner params:', { symbols, startDate, endDate, trendType, consecutiveDays, criteria, filters });
+
+    // Get all tickers if no symbols specified
+    let tickers;
+    if (symbols.length > 0) {
+      tickers = await prisma.ticker.findMany({
+        where: {
+          symbol: { in: symbols.map(s => s.toUpperCase()) },
+          isActive: true
+        },
+        select: { id: true, symbol: true, name: true }
+      });
+    } else {
+      tickers = await prisma.ticker.findMany({
+        where: { isActive: true },
+        select: { id: true, symbol: true, name: true },
+        orderBy: { symbol: 'asc' },
+        take: 100 // Limit for performance
+      });
+    }
+
+    const results = [];
+    const trendMultiplier = trendType === 'Bullish' ? 1 : -1;
+
+    // Build filter conditions
+    const buildFilterConditions = () => {
+      const conditions = {
+        date: {
+          gte: new Date(startDate),
+          lte: new Date(endDate)
+        },
+        tradingMonthDay: { not: null }
+      };
+
+      // Positive/Negative Years filter
+      logger.info('Checking positiveNegativeYears filter:', { positiveNegativeYears: yearFilters.positiveNegativeYears });
+      if (yearFilters.positiveNegativeYears === 'Positive') {
+        conditions.positiveYear = true;
+        logger.info('Added positiveYear = true to conditions');
+      } else if (yearFilters.positiveNegativeYears === 'Negative') {
+        conditions.positiveYear = false;
+      }
+
+      // Even/Odd Years filter
+      if (evenOddYears === 'Even') {
+        conditions.evenYear = true;
+      } else if (evenOddYears === 'Odd') {
+        conditions.evenYear = false;
+      } else if (evenOddYears === 'Leap') {
+        // Leap years - handled in application
+      }
+
+      // Decade Years filter (last digit of year)
+      const decadeYears = yearFilters.decadeYears || [1,2,3,4,5,6,7,8,9,10];
+      if (decadeYears.length < 10) {
+        conditions._decadeYears = decadeYears; // Custom marker for application filter
+      }
+
+      // Positive/Negative Months filter
+      if (monthFilters.positiveNegativeMonths === 'Positive') {
+        conditions.positiveMonth = true;
+      } else if (monthFilters.positiveNegativeMonths === 'Negative') {
+        conditions.positiveMonth = false;
+      }
+
+      // Specific Month filter
+      if (specificMonth > 0 && specificMonth <= 12) {
+        conditions.date = {
+          ...conditions.date,
+          gte: new Date(new Date(startDate).setMonth(specificMonth - 1)),
+          lte: new Date(new Date(endDate).setMonth(specificMonth - 1))
+        };
+      }
+
+      // Specific Expiry Week Monthly filter
+      if (specificExpiryWeekMonthly > 0 && specificExpiryWeekMonthly <= 5) {
+        conditions.expiryWeekNumberMonthly = specificExpiryWeekMonthly;
+      }
+
+      // Specific Monday Week Monthly filter
+      if (specificMondayWeekMonthly > 0 && specificMondayWeekMonthly <= 5) {
+        conditions.mondayWeekNumberMonthly = specificMondayWeekMonthly;
+      }
+
+      return conditions;
+    };
+
+    // Process each ticker
+    for (const ticker of tickers) {
+      try {
+        // Build the filter conditions
+        const filterConditions = buildFilterConditions();
+        filterConditions.tickerId = ticker.id;
+
+        // Fetch daily data for the ticker
+        const dailyData = await prisma.dailySeasonalityData.findMany({
+          where: filterConditions,
+          select: {
+            date: true,
+            tradingMonthDay: true,
+            returnPercentage: true,
+            positiveDay: true,
+            evenYear: true
+          },
+          orderBy: { date: 'asc' }
+        });
+
+        logger.info('Daily data fetched', { count: dailyData.length });
+
+        // Apply Leap Year filter in application if needed
+        let filteredData = dailyData;
+        if (evenOddYears === 'Leap') {
+          filteredData = dailyData.filter(d => {
+            const year = new Date(d.date).getFullYear();
+            return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+          });
+        }
+
+        // Apply Decade Years filter in application if needed
+        const decadeYears = yearFilters.decadeYears || [1,2,3,4,5,6,7,8,9,10];
+        if (decadeYears.length < 10) {
+          filteredData = filteredData.filter(d => {
+            const year = new Date(d.date).getFullYear();
+            const lastDigit = year % 10;
+            const decadeYear = lastDigit === 0 ? 10 : lastDigit;
+            return decadeYears.includes(decadeYear);
+          });
+        }
+
+        // Apply specific month filter in application if needed
+        if (specificMonth > 0 && specificMonth <= 12) {
+          filteredData = filteredData.filter(d => {
+            const month = new Date(d.date).getMonth() + 1; // 1-12
+            return month === specificMonth;
+          });
+        }
+
+        if (filteredData.length === 0) continue;
+
+        // Group by tradingMonthDay
+        const dayGroups = {};
+        filteredData.forEach(record => {
+          const day = record.tradingMonthDay;
+          if (!dayGroups[day]) {
+            dayGroups[day] = {
+              day,
+              returns: [],
+              positiveCount: 0,
+              negativeCount: 0,
+              totalCount: 0
+            };
+          }
+          dayGroups[day].returns.push(record.returnPercentage || 0);
+          dayGroups[day].totalCount++;
+          if ((record.returnPercentage || 0) > 0) {
+            dayGroups[day].positiveCount++;
+          } else if ((record.returnPercentage || 0) < 0) {
+            dayGroups[day].negativeCount++;
+          }
+        });
+
+        // Calculate stats for each trading day
+        const dayStats = Object.values(dayGroups).map(group => {
+          const sum = group.returns.reduce((a, b) => a + b, 0);
+          const avg = sum / group.returns.length;
+          const accuracy = group.totalCount > 0 ? (group.positiveCount / group.totalCount) * 100 : 0;
+
+          return {
+            tradingDay: group.day,
+            allCount: group.totalCount,
+            avgReturnAll: avg,
+            sumReturnAll: sum,
+            positiveCount: group.positiveCount,
+            negativeCount: group.negativeCount,
+            positiveAccuracy: accuracy,
+            avgReturnPos: group.positiveCount > 0 
+              ? group.returns.filter(r => r > 0).reduce((a, b) => a + b, 0) / group.positiveCount 
+              : 0,
+            avgReturnNeg: group.negativeCount > 0 
+              ? group.returns.filter(r => r < 0).reduce((a, b) => a + b, 0) / group.negativeCount 
+              : 0
+          };
+        }).sort((a, b) => a.tradingDay - b.tradingDay);
+
+        // Find N consecutive trending days
+        const matchingChunks = this.findConsecutiveTrendingDays(
+          dayStats,
+          consecutiveDays,
+          minAccuracy,
+          minTotalPnl,
+          minSampleSize,
+          minAvgPnl,
+          trendMultiplier,
+          operations
+        );
+
+        if (matchingChunks.length > 0) {
+          results.push({
+            symbol: ticker.symbol,
+            name: ticker.name,
+            matchCount: matchingChunks.length,
+            matches: matchingChunks.map(chunk => ({
+              startDay: chunk.startDay,
+              endDay: chunk.endDay,
+              totalDays: chunk.totalDays,
+              sampleSize: chunk.sampleSize,
+              accuracy: chunk.accuracy,
+              avgPnl: chunk.avgPnl,
+              totalPnl: chunk.totalPnl
+            }))
+          });
+        }
+      } catch (error) {
+        logger.error(`Scanner error for ${ticker.symbol}:`, error.message);
+      }
+    }
+
+    // Sort by match count descending
+    results.sort((a, b) => b.matchCount - a.matchCount);
+
+    return {
+      totalSymbols: tickers.length,
+      matchedSymbols: results.length,
+      results
+    };
+  }
+
+  /**
+   * Find N consecutive trending days matching criteria
+   */
+  findConsecutiveTrendingDays(
+    dayStats,
+    consecutiveDays,
+    minAccuracy,
+    minTotalPnl,
+    minSampleSize,
+    minAvgPnl,
+    trendMultiplier,
+    operations
+  ) {
+    const chunks = [];
+
+    for (let i = 0; i <= dayStats.length - consecutiveDays; i++) {
+      const chunk = dayStats.slice(i, i + consecutiveDays);
+      
+      // Check if all days in chunk have returns in the trending direction
+      const allTrending = chunk.every(day => 
+        (day.sumReturnAll * trendMultiplier) > 0
+      );
+
+      if (!allTrending) continue;
+
+      // Calculate aggregated stats
+      const totalSampleSize = chunk.reduce((sum, day) => sum + day.allCount, 0);
+      const totalPnl = chunk.reduce((sum, day) => sum + day.sumReturnAll, 0);
+      const avgPnl = totalPnl / consecutiveDays;
+      const avgAccuracy = chunk.reduce((sum, day) => sum + day.positiveAccuracy, 0) / consecutiveDays;
+
+      // Apply criteria with operations
+      const accuracyCheck = avgAccuracy > minAccuracy;
+      const totalPnlCheck = (totalPnl * trendMultiplier) > minTotalPnl;
+      const sampleSizeCheck = totalSampleSize > minSampleSize;
+      const avgPnlCheck = (avgPnl * trendMultiplier) > minAvgPnl;
+
+      let passes = false;
+      if (operations.op12 === 'OR') {
+        passes = accuracyCheck || totalPnlCheck;
+      } else {
+        passes = accuracyCheck && totalPnlCheck;
+      }
+
+      if (operations.op23 === 'OR') {
+        passes = passes || sampleSizeCheck;
+      } else {
+        passes = passes && sampleSizeCheck;
+      }
+
+      if (operations.op34 === 'OR') {
+        passes = passes || avgPnlCheck;
+      } else {
+        passes = passes && avgPnlCheck;
+      }
+
+      if (passes) {
+        chunks.push({
+          startDay: chunk[0].tradingDay,
+          endDay: chunk[consecutiveDays - 1].tradingDay,
+          totalDays: consecutiveDays,
+          sampleSize: totalSampleSize,
+          accuracy: avgAccuracy,
+          avgPnl,
+          totalPnl
+        });
+      }
+    }
+
+    return chunks;
+  }
+
+  /**
    * Clear cache for a symbol (call when new data is uploaded)
    */
   async clearSymbolCache(symbol) {

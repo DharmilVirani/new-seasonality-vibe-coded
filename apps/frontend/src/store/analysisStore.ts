@@ -57,6 +57,8 @@ const defaultFilters: FilterConfig = {
     weekdays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
     evenOddCalendarDaysMonthly: 'All',
     evenOddTradingDaysMonthly: 'All',
+    evenOddCalendarDaysYearly: 'All',
+    evenOddTradingDaysYearly: 'All',
   },
   outlierFilters: {
     dailyPercentageRange: { enabled: false, min: -5, max: 5 },

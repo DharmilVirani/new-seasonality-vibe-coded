@@ -89,6 +89,40 @@ export function DayFilters() {
             </SelectContent>
           </Select>
         </div>
+
+        <div className="space-y-2">
+          <Label>Even/Odd Calendar Days (Yearly)</Label>
+          <Select
+            value={dayFilters.evenOddCalendarDaysYearly || 'All'}
+            onValueChange={(value) => updateFilter('dayFilters', { evenOddCalendarDaysYearly: value as 'All' | 'Even' | 'Odd' })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              <SelectItem value="All">All Days</SelectItem>
+              <SelectItem value="Even">Even Days only</SelectItem>
+              <SelectItem value="Odd">Odd Days only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Even/Odd Trading Days (Yearly)</Label>
+          <Select
+            value={dayFilters.evenOddTradingDaysYearly || 'All'}
+            onValueChange={(value) => updateFilter('dayFilters', { evenOddTradingDaysYearly: value as 'All' | 'Even' | 'Odd' })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              <SelectItem value="All">All Days</SelectItem>
+              <SelectItem value="Even">Even Days only</SelectItem>
+              <SelectItem value="Odd">Odd Days only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );

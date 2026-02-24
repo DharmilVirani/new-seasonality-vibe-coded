@@ -24,6 +24,78 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* === TAB-SPECIFIC ACCENT COLORS === */
+    /* Daily - Cyan (fresh, daily clarity) */
+    --tab-daily: 188 94% 43%;
+    --tab-daily-foreground: 0 0% 100%;
+    --tab-daily-muted: 188 60% 95%;
+    
+    /* Weekly - Emerald (growth, weekly cycles) */
+    --tab-weekly: 160 84% 39%;
+    --tab-weekly-foreground: 0 0% 100%;
+    --tab-weekly-muted: 160 60% 95%;
+    
+    /* Monthly - Amber (warmth, monthly patterns) */
+    --tab-monthly: 38 92% 50%;
+    --tab-monthly-foreground: 0 0% 100%;
+    --tab-monthly-muted: 38 80% 95%;
+    
+    /* Yearly - Violet (prestige, long-term) */
+    --tab-yearly: 263 70% 50%;
+    --tab-yearly-foreground: 0 0% 100%;
+    --tab-yearly-muted: 263 60% 95%;
+    
+    /* Scenario - Sky Blue (forward-looking) */
+    --tab-scenario: 199 89% 48%;
+    --tab-scenario-foreground: 0 0% 100%;
+    --tab-scenario-muted: 199 70% 95%;
+    
+    /* Election - Rose (political, attention) */
+    --tab-election: 350 89% 60%;
+    --tab-election-foreground: 0 0% 100%;
+    --tab-election-muted: 350 70% 95%;
+    
+    /* Scanner - Teal (analytical, scanning) */
+    --tab-scanner: 172 66% 50%;
+    --tab-scanner-foreground: 0 0% 100%;
+    --tab-scanner-muted: 172 50% 95%;
+    
+    /* Backtester - Indigo (research, testing) */
+    --tab-backtester: 239 84% 67%;
+    --tab-backtester-foreground: 0 0% 100%;
+    --tab-backtester-muted: 239 60% 95%;
+    
+    /* Phenomena - Fuchsia (special, unique events) */
+    --tab-phenomena: 292 91% 73%;
+    --tab-phenomena-foreground: 280 60% 30%;
+    --tab-phenomena-muted: 292 60% 95%;
+    
+    /* Basket - Orange (collection, portfolio) */
+    --tab-basket: 25 95% 53%;
+    --tab-basket-foreground: 0 0% 100%;
+    --tab-basket-muted: 25 80% 95%;
+    
+    /* Charts - Slate (neutral, comparison) */
+    --tab-charts: 215 16% 47%;
+    --tab-charts-foreground: 0 0% 100%;
+    --tab-charts-muted: 215 20% 95%;
+    
+    /* Events - Crimson */
+    --tab-events: 348 83% 47%;
+    --tab-events-foreground: 0 0% 100%;
+    --tab-events-muted: 348 60% 95%;
+
+    /* === SEMANTIC COLORS === */
+    /* Positive/Negative for returns */
+    --return-positive: 142 76% 36%;
+    --return-positive-muted: 142 60% 90%;
+    --return-negative: 0 72% 51%;
+    --return-negative-muted: 0 60% 90%;
+    
+    /* Compare color (for comparison mode) */
+    --compare: 280 65% 60%;
+    --compare-muted: 280 50% 92%;
   }
 
   .dark {
@@ -46,6 +118,24 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+    
+    /* Dark mode tab colors - slightly muted */
+    --tab-daily: 188 80% 50%;
+    --tab-weekly: 160 70% 45%;
+    --tab-monthly: 38 85% 55%;
+    --tab-yearly: 263 65% 60%;
+    --tab-scenario: 199 80% 55%;
+    --tab-election: 350 75% 60%;
+    --tab-scanner: 172 60% 50%;
+    --tab-backtester: 239 70% 65%;
+    --tab-phenomena: 292 80% 70%;
+    --tab-basket: 25 85% 58%;
+    --tab-charts: 215 15% 60%;
+    --tab-events: 348 70% 55%;
+    
+    --return-positive: 142 70% 45%;
+    --return-negative: 0 70% 50%;
+    --compare: 280 60% 70%;
   }
 }
 

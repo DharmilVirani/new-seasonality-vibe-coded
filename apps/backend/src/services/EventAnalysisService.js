@@ -70,6 +70,9 @@ class EventAnalysisServiceV2 {
       // 8. Build average event curve (Seasonax-style)
       const averageEventCurve = this.buildAverageEventCurve(validEvents, params.windowConfig);
       
+      // 9. Build individual event curves (for superimposed chart)
+      const eventCurves = this.buildEventCurves(validEvents);
+      
       // 9. Calculate segmented statistics (Before/Event/After)
       const segmentedStats = this.calculateSegmentedStatistics(validEvents, params.windowConfig);
       
@@ -94,6 +97,7 @@ class EventAnalysisServiceV2 {
             }
           },
           averageEventCurve,
+          eventCurves,
           segmentedStats,
           eventOccurrences: trades,
           aggregatedMetrics,
@@ -483,6 +487,20 @@ class EventAnalysisServiceV2 {
     }
     
     return averageCurve.sort((a, b) => a.relativeDay - b.relativeDay);
+  }
+  
+  /**
+   * Build individual event curves for superimposed chart
+   * Returns array of event curves with dates and returns
+   */
+  static buildEventCurves(validEvents) {
+    return validEvents.map(eventWindow => ({
+      eventDate: eventWindow.eventDate,
+      returns: eventWindow.priceData.map(dayData => ({
+        relativeDay: dayData.relativeDay,
+        returnPercentage: dayData.returnPercentage
+      }))
+    }));
   }
   
   /**

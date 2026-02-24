@@ -23,16 +23,17 @@ interface EventCategoryStats {
 
 interface EventCategorySummaryProps {
   data: any[];
+  defaultCategory?: string;
 }
 
-export function EventCategorySummary({ data }: EventCategorySummaryProps) {
+export function EventCategorySummary({ data, defaultCategory }: EventCategorySummaryProps) {
   const categoryStats = useMemo(() => {
     if (!data || data.length === 0) return [];
 
     const categoryGroups: Record<string, number[]> = {};
     
     data.forEach((event: any) => {
-      const category = event.eventCategory || 'Uncategorized';
+      const category = event.eventCategory || event.category || defaultCategory || 'Uncategorized';
       if (!categoryGroups[category]) categoryGroups[category] = [];
       categoryGroups[category].push(event.returnPercentage || 0);
     });

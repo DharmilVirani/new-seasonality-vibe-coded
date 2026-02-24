@@ -33,11 +33,11 @@ import {
 } from '@/components/filters';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 
-const PRIMARY_COLOR = '#eab308';
+const PRIMARY_COLOR = '#0ea5e9';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
-    <RefreshCw className={cn("animate-spin text-yellow-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
+    <RefreshCw className={cn("animate-spin text-sky-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
 
@@ -87,7 +87,7 @@ export default function ScenarioPage() {
               </button>
             )}
             <div className="flex items-center gap-3">
-              <Activity className="h-6 w-6 text-yellow-600" />
+              <Activity className="h-6 w-6 text-sky-600" />
               <div>
                 <h1 className="text-lg font-bold text-slate-900">
                   {selectedSymbols[0] || 'Select Symbol'}

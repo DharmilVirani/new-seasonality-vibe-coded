@@ -1,12 +1,10 @@
-# Seasonality SaaS - Optimized for Old PC (100 users)
-# Simplified production setup without nginx (frontend standalone handles routing)
+# Seasonality SaaS - Docker Compose Configuration
+# Optimized for Ubuntu Desktop (8-16GB RAM)
 
 version: '3.9'
 
 services:
-  # =====================================================
   # PostgreSQL with TimescaleDB
-  # =====================================================
   postgres:
     image: timescale/timescaledb:2.15.1-pg16
     container_name: seasonality-postgres
@@ -14,33 +12,31 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-seasonality}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seasonality123}
       POSTGRES_DB: ${POSTGRES_DB:-seasonality}
-      # Light tuning for old PC
-      POSTGRES_SHARED_BUFFERS: 128MB
-      POSTGRES_EFFECTIVE_CACHE_SIZE: 512MB
-      POSTGRES_WORK_MEM: 2MB
-      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
-      POSTGRES_MAX_CONNECTIONS: 100
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_WORK_MEM: 4MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 128MB
+      POSTGRES_MAX_CONNECTIONS: 200
+      POSTGRES_WORKER_PROCESSES: 4
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seasonality}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seasonality} -d ${POSTGRES_DB:-seasonality}"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     networks:
       - seasonality-net
 
-  # =====================================================
-  # Redis for caching & sessions
-  # =====================================================
+  # Redis for caching
   redis:
     image: redis:7-alpine
     container_name: seasonality-redis
-    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru --save 900 1
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --save 900 1 --save 300 10 --timeout 0
     volumes:
       - redis_data:/data
     ports:
@@ -49,14 +45,12 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
     networks:
       - seasonality-net
 
-  # =====================================================
   # MinIO for file storage
-  # =====================================================
   minio:
     image: minio/minio:latest
     container_name: seasonality-minio
@@ -78,18 +72,16 @@ services:
     networks:
       - seasonality-net
 
-  # =====================================================
   # Backend API
-  # =====================================================
   backend:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
     container_name: seasonality-backend
     ports:
-      - "${API_PORT:-3001}:3001"
+      - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-seasonality}:${POSTGRES_PASSWORD:-seasonality123}@postgres:5432/${POSTGRES_DB:-seasonality}?connection_limit=10
+      DATABASE_URL: postgresql://${POSTGRES_USER:-seasonality}:${POSTGRES_PASSWORD:-seasonality123}@postgres:5432/${POSTGRES_DB:-seasonality}?connection_limit=20&pool_timeout=10
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -100,9 +92,12 @@ services:
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: seasonality-uploads
       NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-your-super-secure-jwt-secret}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      CORS_ORIGIN: "*"
+      DB_POOL_SIZE: 20
+      WORKER_CONCURRENCY: 2
+      LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,20 +109,47 @@ services:
     networks:
       - seasonality-net
 
-  # =====================================================
-  # Frontend (Next.js standalone)
-  # =====================================================
+  # Background Worker for CSV processing
+  worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: seasonality-worker
+    command: node src/jobs/worker.js
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-seasonality}:${POSTGRES_PASSWORD:-seasonality123}@postgres:5432/${POSTGRES_DB:-seasonality}?connection_limit=5
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-admin12345}
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET: seasonality-uploads
+      NODE_ENV: production
+      WORKER_CONCURRENCY: 2
+      DB_BATCH_SIZE: 1000
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - seasonality-net
+
+  # Frontend
   frontend:
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
-      args:
-        NODE_ENV: production
-        NEXT_PUBLIC_API_URL: http://localhost:3001
-        NEXT_PUBLIC_MINIO_ENDPOINT: http://localhost:9000
     container_name: seasonality-frontend
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "3000:3000"
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://localhost:3001
@@ -138,20 +160,11 @@ services:
     networks:
       - seasonality-net
 
-# =====================================================
-# Networks
-# =====================================================
 networks:
   seasonality-net:
     driver: bridge
 
-# =====================================================
-# Volumes
-# =====================================================
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   minio_data:
-    driver: local

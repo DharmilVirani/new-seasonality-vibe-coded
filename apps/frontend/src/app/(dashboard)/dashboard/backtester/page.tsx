@@ -14,7 +14,7 @@ import { RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn, formatPercentage, formatCurrency } from '@/lib/utils';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 
-const PRIMARY_COLOR = '#ec4899';
+const PRIMARY_COLOR = '#64748b';
 
 export default function BacktesterPage() {
   const { selectedSymbols, startDate, endDate, resetFilters } = useAnalysisStore();

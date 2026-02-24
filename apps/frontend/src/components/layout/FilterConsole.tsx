@@ -34,7 +34,7 @@ export function FilterConsole({
   onToggle,
   title = "Filter Console",
   icon,
-  primaryColor = "#f59e0b"
+  primaryColor = "#2563eb"
 }: FilterConsoleProps) {
   const [filterWidth, setFilterWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);

@@ -56,11 +56,11 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
     if (!data || data.length === 0) return [];
 
     const dayGroups: Record<number, number[]> = {};
-    
+
     data.forEach((d: any) => {
       const date = new Date(d.date);
       const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      
+
       // Only track Monday-Friday (1-5)
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         if (!dayGroups[dayOfWeek]) dayGroups[dayOfWeek] = [];
@@ -78,13 +78,13 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
       const positiveCount = positiveReturns.length;
       const negativeCount = negativeReturns.length;
       const winRate = (positiveCount / count) * 100;
-      const avgPositiveReturn = positiveCount > 0 
-        ? positiveReturns.reduce((a, b) => a + b, 0) / positiveCount 
+      const avgPositiveReturn = positiveCount > 0
+        ? positiveReturns.reduce((a, b) => a + b, 0) / positiveCount
         : 0;
-      const avgNegativeReturn = negativeCount > 0 
-        ? negativeReturns.reduce((a, b) => a + b, 0) / negativeCount 
+      const avgNegativeReturn = negativeCount > 0
+        ? negativeReturns.reduce((a, b) => a + b, 0) / negativeCount
         : 0;
-      
+
       return {
         day: DAYS_OF_WEEK[dayNumber - 1],
         dayNumber,
@@ -158,7 +158,7 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
   // Find best and worst performing days
   const bestDay = dayStats.reduce((a, b) => a.avgReturn > b.avgReturn ? a : b);
   const worstDay = dayStats.reduce((a, b) => a.avgReturn < b.avgReturn ? a : b);
-  const mostConsistent = dayStats.reduce((a, b) => 
+  const mostConsistent = dayStats.reduce((a, b) =>
     Math.abs(a.winRate - 50) < Math.abs(b.winRate - 50) ? a : b
   );
 
@@ -176,11 +176,11 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
           Export
         </Button>
       </CardHeader>
-      
+
       <CardContent>
         {/* Summary Cards */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+          <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
             <div className="flex items-center gap-2 text-emerald-600 mb-1">
               <TrendingUp className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase">Best Day</span>
@@ -190,8 +190,8 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
               {formatPercentage(bestDay.avgReturn)} avg
             </div>
           </div>
-          
-          <div className="bg-rose-50 rounded-lg p-4 border border-rose-100">
+
+          <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
             <div className="flex items-center gap-2 text-rose-600 mb-1">
               <TrendingDown className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase">Worst Day</span>
@@ -201,8 +201,8 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
               {formatPercentage(worstDay.avgReturn)} avg
             </div>
           </div>
-          
-          <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+
+          <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
             <div className="flex items-center gap-2 text-amber-600 mb-1">
               <Minus className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase">Most Consistent</span>
@@ -293,8 +293,8 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
             </thead>
             <tbody>
               {dayStats.map((row) => (
-                <tr 
-                  key={row.day} 
+                <tr
+                  key={row.day}
                   className={cn(
                     "border-b border-slate-100 hover:bg-slate-50/50",
                     row.day === bestDay.day && "bg-emerald-50/30",
@@ -322,9 +322,9 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
                   <td className="p-3 text-center">
                     <span className={cn(
                       'px-2 py-1 rounded-full text-xs font-medium',
-                      row.winRate > 50 ? 'bg-emerald-100 text-emerald-700' : 
-                      row.winRate < 50 ? 'bg-rose-100 text-rose-700' : 
-                      'bg-slate-100 text-slate-700'
+                      row.winRate > 50 ? 'bg-emerald-100 text-emerald-700' :
+                        row.winRate < 50 ? 'bg-rose-100 text-rose-700' :
+                          'bg-slate-100 text-slate-700'
                     )}>
                       {row.winRate.toFixed(1)}%
                     </span>

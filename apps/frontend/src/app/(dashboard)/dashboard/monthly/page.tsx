@@ -17,7 +17,7 @@ import { useChartSelectionStore } from '@/store/chartSelectionStore';
 import { CumulativeChartWithDragSelect, ReturnBarChart } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn, TAB_COLORS } from '@/lib/utils';
 import { AreaChart, Area, XAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 import { 
@@ -32,11 +32,11 @@ import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
-    <RefreshCw className={cn("animate-spin text-purple-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
+    <RefreshCw className={cn("animate-spin text-violet-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
 
-const PRIMARY_COLOR = '#8b5cf6';
+const TAB_COLOR = TAB_COLORS.monthly;
 
 export default function MonthlyPage() {
   const { selectedSymbols, startDate, endDate, filters, chartScale, resetFilters } = useAnalysisStore();
@@ -406,7 +406,7 @@ export default function MonthlyPage() {
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"
-        primaryColor={PRIMARY_COLOR}
+        primaryColor={TAB_COLOR.accent}
       >
         <FilterSection title="Market Context" defaultOpen delay={0}>
           <div className="space-y-3">

@@ -5,12 +5,12 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { LoadingOverlay } from '@/components/ui/loading';
 import { useNavigationLoading } from '@/hooks/useNavigationLoading';
-import { 
-  BarChart3, 
-  Calendar, 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  BarChart3,
+  Calendar,
   Zap,
   Search,
-  Layers,
   ShoppingCart,
   Settings,
   LogOut,
@@ -21,38 +21,47 @@ import {
   Vote,
   TestTube
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, TAB_COLORS } from '@/lib/utils';
+
+// Premium glassmorphism & sophisticated aesthetic adjustments
+const glassClasses = "bg-white/80 backdrop-blur-2xl border border-white/40 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.06)] ring-1 ring-slate-900/5";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-const navigationGroups = [
+type NavItem = {
+  icon: React.ElementType;
+  label: string;
+  href: string;
+  color: string;
+};
+
+const navigationGroups: { title: string; items: NavItem[] }[] = [
   {
     title: 'Analysis',
     items: [
-      { icon: Calendar, label: 'Daily', href: '/dashboard/daily', color: '#10b981' },
-      { icon: CalendarDays, label: 'Weekly', href: '/dashboard/weekly', color: '#f59e0b' },
-      { icon: CalendarRange, label: 'Monthly', href: '/dashboard/monthly', color: '#8b5cf6' },
-      { icon: Layers, label: 'Yearly', href: '/dashboard/yearly', color: '#f97316' },
-      { icon: Zap, label: 'Events', href: '/dashboard/events', color: '#7c3aed' },
+      { icon: Calendar, label: 'Daily', href: '/dashboard/daily', color: TAB_COLORS.daily.accent },
+      { icon: CalendarDays, label: 'Weekly', href: '/dashboard/weekly', color: TAB_COLORS.weekly.accent },
+      { icon: CalendarRange, label: 'Monthly', href: '/dashboard/monthly', color: TAB_COLORS.monthly.accent },
+      { icon: Zap, label: 'Events', href: '/dashboard/events', color: TAB_COLORS.events.accent },
     ]
   },
   {
     title: 'Strategy',
     items: [
-      { icon: LineChart, label: 'Scenario', href: '/dashboard/scenario', color: '#eab308' },
-      { icon: Vote, label: 'Election', href: '/dashboard/election', color: '#ef4444' },
-      { icon: Sparkles, label: 'Phenomena', href: '/dashboard/phenomena', color: '#14b8a6' },
-      { icon: TestTube, label: 'Backtester', href: '/dashboard/backtester', color: '#ec4899' },
+      { icon: LineChart, label: 'Scenario', href: '/dashboard/scenario', color: TAB_COLORS.scenario.accent },
+      { icon: Vote, label: 'Election', href: '/dashboard/election', color: TAB_COLORS.election.accent },
+      { icon: Sparkles, label: 'Phenomena', href: '/dashboard/phenomena', color: TAB_COLORS.phenomena.accent },
+      { icon: TestTube, label: 'Backtester', href: '/dashboard/backtester', color: TAB_COLORS.backtester.accent },
     ]
   },
   {
     title: 'Tools',
     items: [
-      { icon: Search, label: 'Scanner', href: '/dashboard/scanner', color: '#06b6d4' },
-      { icon: ShoppingCart, label: 'Basket', href: '/dashboard/basket', color: '#6366f1' },
-      { icon: BarChart3, label: 'Charts', href: '/dashboard/charts', color: '#10b981' },
+      { icon: Search, label: 'Scanner', href: '/dashboard/scanner', color: TAB_COLORS.scanner.accent },
+      { icon: ShoppingCart, label: 'Basket', href: '/dashboard/basket', color: TAB_COLORS.basket.accent },
+      { icon: BarChart3, label: 'Charts', href: '/dashboard/charts', color: TAB_COLORS.charts.accent },
     ]
   }
 ];
@@ -64,7 +73,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
-  
+
   useNavigationLoading(setIsNavigating);
 
   const handleLogout = () => {
@@ -74,7 +83,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const getPageColor = useMemo(() => {
     const activeItem = allNavigationItems.find(item => pathname === item.href);
-    return activeItem?.color || '#6366f1';
+    return activeItem?.color || '#10b981';
   }, [pathname]);
 
   const handleNavigation = (href: string) => {
@@ -82,131 +91,139 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <LoadingOverlay isVisible={isNavigating} text="Loading..." />
-      
-      {/* LEFT NAVIGATION SIDEBAR - Fixed narrow width, no collapse */}
-      <aside className="flex flex-col h-full w-[200px] bg-white border-r border-slate-200 flex-shrink-0 relative z-30">
-        {/* Logo */}
-        <div className="h-14 flex items-center border-b border-slate-100 bg-gradient-to-r from-white to-slate-50/50 px-3">
-          <div 
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
-            style={{
-              background: `linear-gradient(135deg, ${getPageColor} 0%, ${getPageColor}dd 100%)`,
-            }}
-          >
-            <BarChart3 className="h-4 w-4 text-white" />
-          </div>
-          <div className="ml-2.5 overflow-hidden">
-            <span className="font-bold text-slate-800 text-sm whitespace-nowrap block">
-              Seasonality
-            </span>
-            <span className="text-[10px] text-slate-400 whitespace-nowrap">
-              Analytics
-            </span>
-          </div>
-        </div>
+    <TooltipProvider>
+      <div className="flex h-screen bg-slate-50 overflow-hidden">
+        <LoadingOverlay isVisible={isNavigating} text="Loading..." />
 
-        {/* Navigation */}
-        <nav className="flex-1 py-3 px-1.5 overflow-y-auto overflow-x-hidden">
-          {navigationGroups.map((group, groupIndex) => (
-            <div key={group.title} className={cn("mb-3", groupIndex > 0 && "mt-5")}>
-              <div className="px-2 mb-1.5">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                  {group.title}
-                </span>
+        {/* LEFT NAVIGATION SIDEBAR - Floating Premium Glass Dock */}
+        <div className="py-4 pl-4 pr-0 h-full">
+          <aside className={cn("flex flex-col h-full w-[64px] flex-shrink-0 relative z-30 rounded-2xl overflow-hidden", glassClasses)}>
+            {/* Logo area */}
+            <div className="h-16 flex items-center justify-center border-b border-slate-200/50 mt-1">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.12)] relative overflow-hidden"
+                style={{
+                  background: `linear-gradient(135deg, ${getPageColor} 0%, ${getPageColor}dd 100%)`,
+                }}
+              >
+                <div className="absolute inset-0 bg-white/20" style={{ mixBlendMode: 'overlay' }}></div>
+                <BarChart3 className="h-5 w-5 text-white relative z-10" strokeWidth={2.5} />
               </div>
-              
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
+            </div>
+
+            {/* Navigation */}
+            <nav className="flex-1 py-4 px-2 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]">
+              <div className="space-y-1.5 flex flex-col items-center">
+                {allNavigationItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
-                  
                   return (
-                    <button
-                      key={item.href}
-                      onClick={() => handleNavigation(item.href)}
-                      className={cn(
-                        "w-full h-9 rounded-lg flex items-center relative overflow-hidden transition-all duration-150 px-1.5",
-                        isActive ? "bg-slate-100" : "hover:bg-slate-50"
-                      )}
-                    >
-                      {isActive && (
-                        <div 
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
-                          style={{ backgroundColor: item.color }}
-                        />
-                      )}
-                      
-                      <div 
-                        className={cn(
-                          "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors",
-                          isActive ? "text-white" : "text-slate-400 bg-slate-100"
-                        )}
-                        style={isActive ? { backgroundColor: item.color } : {}}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </div>
-                      
-                      <span className={cn(
-                        "ml-2 text-xs font-medium whitespace-nowrap",
-                        isActive ? "text-slate-800" : "text-slate-500"
-                      )}>
-                        {item.label}
-                      </span>
-                    </button>
+                    <div key={item.href} className="relative flex justify-center">
+                      <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => handleNavigation(item.href)}
+                            className={cn(
+                              "w-11 h-11 mx-auto rounded-xl flex items-center justify-center relative transition-all duration-300 group outline-none",
+                              isActive ? "bg-slate-100/50 shadow-inner" : "hover:bg-slate-50 border border-transparent hover:border-slate-200/50"
+                            )}
+                          >
+                            {isActive && (
+                              <div
+                                className="absolute left-[3px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full transition-all duration-500 ease-out shadow-sm"
+                                style={{ backgroundColor: item.color, boxShadow: `0 0 10px ${item.color}80` }}
+                              />
+                            )}
+
+                            <div
+                              className={cn(
+                                "w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-300",
+                                isActive
+                                  ? "text-white shadow-sm scale-100 ring-1 ring-black/5"
+                                  : "text-slate-400 group-hover:text-slate-800 group-hover:scale-105"
+                              )}
+                              style={isActive ? { backgroundImage: `linear-gradient(135deg, ${item.color} 0%, ${item.color}ee 100%)`, boxShadow: `0 4px 12px ${item.color}30` } : {}}
+                            >
+                              <Icon className="h-[18px] w-[18px]" strokeWidth={isActive ? 2 : 1.75} />
+                            </div>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" sideOffset={14} className="relative z-[100] bg-slate-900 border border-slate-800 text-slate-100 font-medium tracking-wide shadow-xl px-3 py-1.5 text-[11px] uppercase rounded-lg">
+                          {item.label}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   );
                 })}
               </div>
-            </div>
-          ))}
-        </nav>
+            </nav>
 
-        {/* Bottom Section */}
-        <div className="p-1.5 border-t border-slate-100 bg-slate-50/50">
-          <button className="h-9 rounded-lg flex items-center hover:bg-white transition-colors px-1.5 w-full">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 bg-slate-100">
-              <Settings className="h-3.5 w-3.5" />
-            </div>
-            <span className="ml-2 text-xs font-medium text-slate-500 whitespace-nowrap">
-              Settings
-            </span>
-          </button>
+            {/* Bottom Section */}
+            <div className="p-2 border-t border-slate-200/50 bg-slate-50/30 flex flex-col items-center gap-2 pb-5 mt-auto">
+              {/* Settings */}
+              <div className="relative">
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="w-11 h-11 mx-auto rounded-xl flex items-center justify-center hover:bg-slate-50 group transition-all duration-300 border border-transparent hover:border-slate-200/50"
+                    >
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-slate-800 transition-colors">
+                        <Settings className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={14} className="relative z-[100] bg-slate-900 border border-slate-800 text-slate-100 font-medium tracking-wide shadow-xl px-3 py-1.5 text-[11px] uppercase rounded-lg">
+                    Settings
+                  </TooltipContent>
+                </Tooltip>
+              </div>
 
-          <button
-            onClick={handleLogout}
-            className="h-9 rounded-lg flex items-center hover:bg-white transition-colors mt-0.5 px-1.5 w-full"
-          >
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 bg-slate-100">
-              <LogOut className="h-3.5 w-3.5" />
-            </div>
-            <span className="ml-2 text-xs font-medium text-slate-500 whitespace-nowrap">
-              Logout
-            </span>
-          </button>
+              {/* Logout */}
+              <div className="relative">
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleLogout}
+                      className="w-11 h-11 mx-auto rounded-xl flex items-center justify-center hover:bg-slate-50 group transition-all duration-300 border border-transparent hover:border-slate-200/50"
+                    >
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-rose-500 transition-colors">
+                        <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={14} className="relative z-[100] bg-slate-900 border border-slate-800 text-slate-100 font-medium tracking-wide shadow-xl px-3 py-1.5 text-[11px] uppercase rounded-lg">
+                    Logout
+                  </TooltipContent>
+                </Tooltip>
+              </div>
 
-          {/* User Profile */}
-          <div className="mt-2 p-1.5 rounded-xl flex items-center bg-white border border-slate-100 shadow-sm w-full">
-            <div 
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
-              style={{
-                background: `linear-gradient(135deg, ${getPageColor} 0%, ${getPageColor}dd 100%)`,
-              }}
-            >
-              {user?.name?.charAt(0) || 'U'}
+              {/* User Profile */}
+              <div
+                className="mt-3 p-1 rounded-full flex items-center justify-center bg-white shadow-sm ring-1 ring-slate-200/50 relative group cursor-pointer transition-transform duration-300 hover:scale-105"
+                title={user?.name || 'User'}
+              >
+                <div className="absolute inset-[-2px] rounded-full bg-gradient-to-tr from-slate-200 to-slate-100 opacity-50 group-hover:opacity-100 transition-opacity -z-10 blur-[1px]"></div>
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+                  style={{
+                    background: `linear-gradient(135deg, ${getPageColor} 0%, ${getPageColor}dd 100%)`,
+                    fontFamily: 'system-ui'
+                  }}
+                >
+                  {user?.name?.charAt(0) || 'U'}
+                </div>
+              </div>
             </div>
-            <div className="ml-2 overflow-hidden flex-1 min-w-0">
-              <div className="text-xs font-semibold text-slate-700 truncate">{user?.name || 'User'}</div>
-              <div className="text-[9px] text-slate-400 truncate">{user?.email || 'user@example.com'}</div>
-            </div>
-          </div>
+          </aside>
         </div>
-      </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 overflow-hidden min-w-0">
-        {children}
-      </main>
-    </div>
+        {/* MAIN CONTENT */}
+        <div className="flex-1 overflow-hidden min-w-0 bg-slate-50 rounded-tl-3xl shadow-[inset_4px_4px_10px_rgba(0,0,0,0.02)] border-t border-l border-slate-200/60 ml-2 mt-2 flex flex-col">
+          <main className="flex-1 overflow-y-auto w-full">
+            {children}
+          </main>
+        </div>
+      </div>
+    </TooltipProvider>
   );
 }

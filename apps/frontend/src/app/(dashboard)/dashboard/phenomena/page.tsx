@@ -15,7 +15,7 @@ import { Sparkles } from 'lucide-react';
 import { cn, formatPercentage } from '@/lib/utils';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 
-const PRIMARY_COLOR = '#14b8a6';
+const PRIMARY_COLOR = '#a855f7';
 
 export default function PhenomenaPage() {
   const { selectedSymbols, startDate, endDate, resetFilters } = useAnalysisStore();

@@ -17,7 +17,7 @@ import { useChartSelectionStore } from '@/store/chartSelectionStore';
 import { CumulativeChartWithDragSelect } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn, TAB_COLORS } from '@/lib/utils';
 
 import { 
   SymbolSelector, 
@@ -30,11 +30,11 @@ import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
-    <RefreshCw className={cn("animate-spin text-amber-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
+    <RefreshCw className={cn("animate-spin text-indigo-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
 
-const PRIMARY_COLOR = '#f97316';
+const TAB_COLOR = TAB_COLORS.yearly;
 
 export default function YearlyPage() {
   const { selectedSymbols, startDate, endDate, filters, chartScale, resetFilters } = useAnalysisStore();
@@ -132,7 +132,7 @@ export default function YearlyPage() {
         <header className="flex-shrink-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <TrendingUp className="h-6 w-6 text-amber-600" />
+              <TrendingUp className="h-6 w-6 text-indigo-600" />
               <div>
                 <h1 className="text-lg font-bold text-slate-900">
                   {selectedSymbols[0] || 'Select Symbol'}
@@ -145,13 +145,13 @@ export default function YearlyPage() {
           <div className="flex items-center gap-4">
             {/* Selection indicator */}
             {timeRangeSelection.isActive && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="text-xs font-semibold text-amber-700">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <div className="text-xs font-semibold text-blue-700">
                   {timeRangeSelection.startDate} → {timeRangeSelection.endDate}
                 </div>
                 <button
                   onClick={clearTimeRangeSelection}
-                  className="text-amber-600 hover:text-amber-800 font-bold"
+                  className="text-indigo-600 hover:text-indigo-800 font-bold"
                   title="Clear selection"
                 >
                   ✕
@@ -164,7 +164,7 @@ export default function YearlyPage() {
               <span className="text-slate-500 font-semibold">1D</span>
               <span className="text-slate-500 font-semibold">1W</span>
               <span className="text-slate-500 font-semibold">1M</span>
-              <span className="text-amber-600 font-bold">1Y</span>
+              <span className="text-indigo-600 font-bold">1Y</span>
             </div>
             
             {/* User Profile Section */}
@@ -251,7 +251,7 @@ export default function YearlyPage() {
                   className={cn(
                     "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
                     activeTab === 'chart' 
-                      ? "bg-amber-50 text-amber-600" 
+                      ? "bg-indigo-50 text-indigo-600" 
                       : "text-slate-500 hover:text-slate-700"
                   )}
                 >
@@ -262,7 +262,7 @@ export default function YearlyPage() {
                   className={cn(
                     "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
                     activeTab === 'table' 
-                      ? "bg-amber-50 text-amber-600" 
+                      ? "bg-indigo-50 text-indigo-600" 
                       : "text-slate-500 hover:text-slate-700"
                   )}
                 >
@@ -342,7 +342,7 @@ export default function YearlyPage() {
         isLoading={isFetching}
         title="Filters"
         subtitle="Configure Analysis"
-        primaryColor={PRIMARY_COLOR}
+        primaryColor={TAB_COLOR.accent}
       >
         <FilterSection title="Market Context" defaultOpen delay={0}>
           <div className="space-y-3">

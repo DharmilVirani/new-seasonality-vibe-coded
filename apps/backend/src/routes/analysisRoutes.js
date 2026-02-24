@@ -1043,4 +1043,52 @@ router.post('/cache/clear',
   }
 );
 
+/**
+ * POST /analysis/scanner
+ * Symbol Scanner - Find symbols with N consecutive trending days
+ */
+router.post('/scanner',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const {
+        symbols = [],
+        startDate,
+        endDate,
+        filters = {},
+        trendType = 'Bullish',
+        consecutiveDays = 3,
+        criteria = {}
+      } = req.body;
+
+      logger.info('Scanner request received', {
+        symbols,
+        startDate,
+        endDate,
+        trendType,
+        consecutiveDays,
+        criteria
+      });
+
+      const result = await AnalysisService.scanner({
+        symbols,
+        startDate,
+        endDate,
+        filters,
+        trendType,
+        consecutiveDays,
+        criteria
+      });
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Scanner error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
 module.exports = router;
