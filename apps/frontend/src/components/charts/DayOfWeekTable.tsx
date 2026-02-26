@@ -159,7 +159,7 @@ export function DayOfWeekTable({ data, symbol }: DayOfWeekTableProps) {
   const bestDay = dayStats.reduce((a, b) => a.avgReturn > b.avgReturn ? a : b);
   const worstDay = dayStats.reduce((a, b) => a.avgReturn < b.avgReturn ? a : b);
   const mostConsistent = dayStats.reduce((a, b) =>
-    Math.abs(a.winRate - 50) < Math.abs(b.winRate - 50) ? a : b
+    a.winRate > b.winRate ? a : b
   );
 
   return (

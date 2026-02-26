@@ -1343,9 +1343,9 @@ class AnalysisService {
     // Extract all filter options
     const {
       evenOddYears = 'All',       // All, Even, Odd, Leap
-      specificMonth = 0,          // 0 = All, 1-12 = specific month
-      specificExpiryWeekMonthly = 0, // 0 = All, 1-5 = specific week
-      specificMondayWeekMonthly = 0,  // 0 = All, 1-5 = specific week
+      specificMonths = [],        // [] = All, [1,2,3] = Jan-Mar
+      specificExpiryWeeksMonthly = [], // [] = All, [1,2] = 1st and 2nd week
+      specificMondayWeeksMonthly = [],  // [] = All, [1,2] = 1st and 2nd week
       yearFilters = {},
       monthFilters = {}
     } = filters;
@@ -1425,24 +1425,9 @@ class AnalysisService {
         conditions.positiveMonth = false;
       }
 
-      // Specific Month filter
-      if (specificMonth > 0 && specificMonth <= 12) {
-        conditions.date = {
-          ...conditions.date,
-          gte: new Date(new Date(startDate).setMonth(specificMonth - 1)),
-          lte: new Date(new Date(endDate).setMonth(specificMonth - 1))
-        };
-      }
-
-      // Specific Expiry Week Monthly filter
-      if (specificExpiryWeekMonthly > 0 && specificExpiryWeekMonthly <= 5) {
-        conditions.expiryWeekNumberMonthly = specificExpiryWeekMonthly;
-      }
-
-      // Specific Monday Week Monthly filter
-      if (specificMondayWeekMonthly > 0 && specificMondayWeekMonthly <= 5) {
-        conditions.mondayWeekNumberMonthly = specificMondayWeekMonthly;
-      }
+      // Specific Months filter - handled in application (after fetch) to allow multiple months
+      // Specific Expiry Week Monthly filter - handled in application (after fetch) to allow multiple weeks
+      // Specific Monday Week Monthly filter - handled in application (after fetch) to allow multiple weeks
 
       return conditions;
     };
@@ -1462,7 +1447,9 @@ class AnalysisService {
             tradingMonthDay: true,
             returnPercentage: true,
             positiveDay: true,
-            evenYear: true
+            evenYear: true,
+            expiryWeekNumberMonthly: true,
+            mondayWeekNumberMonthly: true
           },
           orderBy: { date: 'asc' }
         });
@@ -1489,30 +1476,49 @@ class AnalysisService {
           });
         }
 
-        // Apply specific month filter in application if needed
-        if (specificMonth > 0 && specificMonth <= 12) {
+        // Apply specific months filter in application if needed (supports multiple months)
+        if (specificMonths.length > 0) {
           filteredData = filteredData.filter(d => {
             const month = new Date(d.date).getMonth() + 1; // 1-12
-            return month === specificMonth;
+            return specificMonths.includes(month);
+          });
+        }
+
+        // Apply specific expiry weeks filter in application if needed (supports multiple weeks)
+        if (specificExpiryWeeksMonthly.length > 0) {
+          filteredData = filteredData.filter(d => {
+            return d.expiryWeekNumberMonthly && specificExpiryWeeksMonthly.includes(d.expiryWeekNumberMonthly);
+          });
+        }
+
+        // Apply specific monday weeks filter in application if needed (supports multiple weeks)
+        if (specificMondayWeeksMonthly.length > 0) {
+          filteredData = filteredData.filter(d => {
+            return d.mondayWeekNumberMonthly && specificMondayWeeksMonthly.includes(d.mondayWeekNumberMonthly);
           });
         }
 
         if (filteredData.length === 0) continue;
 
-        // Group by tradingMonthDay
+        // Group by tradingMonthDay and track actual dates with year
         const dayGroups = {};
         filteredData.forEach(record => {
           const day = record.tradingMonthDay;
+          const year = new Date(record.date).getFullYear();
           if (!dayGroups[day]) {
             dayGroups[day] = {
               day,
               returns: [],
+              dates: [],
+              years: [],
               positiveCount: 0,
               negativeCount: 0,
               totalCount: 0
             };
           }
           dayGroups[day].returns.push(record.returnPercentage || 0);
+          dayGroups[day].dates.push(record.date);
+          dayGroups[day].years.push(year);
           dayGroups[day].totalCount++;
           if ((record.returnPercentage || 0) > 0) {
             dayGroups[day].positiveCount++;
@@ -1526,6 +1532,56 @@ class AnalysisService {
           const sum = group.returns.reduce((a, b) => a + b, 0);
           const avg = sum / group.returns.length;
           const accuracy = group.totalCount > 0 ? (group.positiveCount / group.totalCount) * 100 : 0;
+          
+          // Sort dates to get first and last
+          const validDates = group.dates.filter(d => d != null && d != undefined);
+          const sortedDates = validDates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+          const firstDate = sortedDates[0] ? sortedDates[0] : null;
+          const lastDate = sortedDates[sortedDates.length - 1] ? sortedDates[sortedDates.length - 1] : null;
+          
+          // Format date as dd/mm/yyyy
+          const formatDate = (date) => {
+            if (!date) return '';
+            try {
+              const d = new Date(date);
+              if (isNaN(d.getTime())) return '';
+              const dd = String(d.getDate()).padStart(2, '0');
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const yyyy = d.getFullYear();
+              return `${dd}/${mm}/${yyyy}`;
+            } catch (e) {
+              return '';
+            }
+          };
+
+          // Build year occurrences array
+          const yearOccurrences = {};
+          group.dates.forEach((date, idx) => {
+            const year = group.years[idx];
+            const returnPct = group.returns[idx];
+            if (!yearOccurrences[year]) {
+              yearOccurrences[year] = {
+                year,
+                dates: [],
+                returns: [],
+                positive: false
+              };
+            }
+            yearOccurrences[year].dates.push(formatDate(date));
+            yearOccurrences[year].returns.push(returnPct);
+          });
+
+          // For each year, get the date for this trading day
+          const yearList = Object.values(yearOccurrences).map(y => {
+            const totalReturn = y.returns.reduce((a, b) => a + b, 0);
+            return {
+              year: y.year,
+              startDate: y.dates[0] || '',
+              endDate: y.dates[y.dates.length - 1] || '',
+              totalReturn: totalReturn,
+              positive: totalReturn > 0
+            };
+          }).sort((a, b) => a.year - b.year);
 
           return {
             tradingDay: group.day,
@@ -1540,7 +1596,10 @@ class AnalysisService {
               : 0,
             avgReturnNeg: group.negativeCount > 0 
               ? group.returns.filter(r => r < 0).reduce((a, b) => a + b, 0) / group.negativeCount 
-              : 0
+              : 0,
+            firstDate: formatDate(firstDate),
+            lastDate: formatDate(lastDate),
+            yearOccurrences: yearList
           };
         }).sort((a, b) => a.tradingDay - b.tradingDay);
 
@@ -1568,7 +1627,12 @@ class AnalysisService {
               sampleSize: chunk.sampleSize,
               accuracy: chunk.accuracy,
               avgPnl: chunk.avgPnl,
-              totalPnl: chunk.totalPnl
+              totalPnl: chunk.totalPnl,
+              startDate: chunk.startDate || '',
+              endDate: chunk.endDate || '',
+              firstMatchDate: chunk.firstMatchDate || '',
+              lastMatchDate: chunk.lastMatchDate || '',
+              yearOccurrences: chunk.yearOccurrences || []
             }))
           });
         }
@@ -1613,16 +1677,15 @@ class AnalysisService {
       if (!allTrending) continue;
 
       // Calculate aggregated stats
-      const totalSampleSize = chunk.reduce((sum, day) => sum + day.allCount, 0);
       const totalPnl = chunk.reduce((sum, day) => sum + day.sumReturnAll, 0);
       const avgPnl = totalPnl / consecutiveDays;
       const avgAccuracy = chunk.reduce((sum, day) => sum + day.positiveAccuracy, 0) / consecutiveDays;
 
-      // Apply criteria with operations
-      const accuracyCheck = avgAccuracy > minAccuracy;
+      // Apply criteria with operations - OLD SOFTWARE LOGIC: EACH day must exceed the threshold
+      const accuracyCheck = chunk.every(day => day.positiveAccuracy > minAccuracy);
       const totalPnlCheck = (totalPnl * trendMultiplier) > minTotalPnl;
-      const sampleSizeCheck = totalSampleSize > minSampleSize;
-      const avgPnlCheck = (avgPnl * trendMultiplier) > minAvgPnl;
+      const sampleSizeCheck = chunk.every(day => day.allCount > minSampleSize);
+      const avgPnlCheck = chunk.every(day => (day.avgReturnAll * trendMultiplier) > minAvgPnl);
 
       let passes = false;
       if (operations.op12 === 'OR') {
@@ -1644,14 +1707,67 @@ class AnalysisService {
       }
 
       if (passes) {
+        // Group year occurrences by year and calculate combined return for the pattern
+        const yearPatternMap = {};
+        
+        // For each trading day in the chunk, aggregate by year
+        chunk.forEach((day, dayIdx) => {
+          if (day.yearOccurrences) {
+            day.yearOccurrences.forEach(y => {
+              if (!yearPatternMap[y.year]) {
+                yearPatternMap[y.year] = {
+                  year: y.year,
+                  startDate: '',
+                  endDate: '',
+                  returns: [],
+                  positiveDays: 0,
+                  negativeDays: 0
+                };
+              }
+              // Track start and end dates for this year's pattern
+              if (!yearPatternMap[y.year].startDate || y.startDate < yearPatternMap[y.year].startDate) {
+                yearPatternMap[y.year].startDate = y.startDate;
+              }
+              if (!yearPatternMap[y.year].endDate || y.endDate > yearPatternMap[y.year].endDate) {
+                yearPatternMap[y.year].endDate = y.endDate;
+              }
+              // Add the return for this trading day
+              yearPatternMap[y.year].returns.push(y.totalReturn);
+              if (y.totalReturn > 0) yearPatternMap[y.year].positiveDays++;
+              else if (y.totalReturn < 0) yearPatternMap[y.year].negativeDays++;
+            });
+          }
+        });
+
+        // Convert to array with combined return
+        const yearOccurrences = Object.values(yearPatternMap).map(y => {
+          const totalReturn = y.returns.reduce((sum, r) => sum + r, 0);
+          // Pattern is positive if majority of days are positive
+          const positive = y.positiveDays >= y.negativeDays;
+          return {
+            year: y.year,
+            startDate: y.startDate,
+            endDate: y.endDate,
+            totalReturn: totalReturn,
+            positive: positive
+          };
+        }).sort((a, b) => a.year - b.year);
+
         chunks.push({
           startDay: chunk[0].tradingDay,
           endDay: chunk[consecutiveDays - 1].tradingDay,
           totalDays: consecutiveDays,
-          sampleSize: totalSampleSize,
+          sampleSize: chunk[0].allCount, // Sample from first day only - matches old software
           accuracy: avgAccuracy,
           avgPnl,
-          totalPnl
+          totalPnl,
+          // Add actual dates for each match
+          startDate: chunk[0].firstDate,
+          endDate: chunk[chunk.length - 1].lastDate,
+          firstMatchDate: chunk[0].firstDate,
+          lastMatchDate: chunk[chunk.length - 1].lastDate,
+          // Add year occurrences for drill-down - grouped by year with combined return
+          yearOccurrences: yearOccurrences
         });
       }
     }

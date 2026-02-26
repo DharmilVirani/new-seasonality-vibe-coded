@@ -114,6 +114,15 @@ export function filterDataByDayRange(
   const maxDay = Math.max(dayRange.startDay, dayRange.endDay);
   const chartType = dayRange.chartType || superimposedChartType;
 
+  // Special case: for CalendarMonthDays with month range (1-12), filter by month number
+  if (chartType === 'CalendarMonthDays' && minDay >= 1 && maxDay <= 12) {
+    return data.filter((d: any) => {
+      const date = new Date(d.date);
+      const month = date.getMonth() + 1; // 1-12
+      return month >= minDay && month <= maxDay;
+    });
+  }
+
   return data.filter((d: any) => {
     const date = new Date(d.date);
     let dayKey: number;

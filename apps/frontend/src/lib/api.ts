@@ -321,9 +321,9 @@ export interface FilterConfig {
   outlierFilters?: OutlierFilters;
   // Scanner-specific filters
   evenOddYears?: string;
-  specificMonth?: number;
-  specificExpiryWeekMonthly?: number;
-  specificMondayWeekMonthly?: number;
+  specificMonths?: number[];
+  specificExpiryWeeksMonthly?: number[];
+  specificMondayWeeksMonthly?: number[];
 }
 
 interface YearFilters {

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "frontend-slides": {
+      "source": "zarazhangrui/frontend-slides",
+      "sourceType": "github",
+      "computedHash": "d7c5118a96d9d51b2e2474c85200b499907108ea177623f3c75a4b3255862dd0"
+    }
+  }
+}

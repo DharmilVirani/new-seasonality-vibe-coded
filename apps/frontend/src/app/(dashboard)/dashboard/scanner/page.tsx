@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { 
-  Play, Filter, 
+import {
+  Play, Filter,
   ChevronDown, ChevronRight, ChevronLeft,
   RefreshCw, Download,
   Search, Settings2,
@@ -12,9 +12,20 @@ import {
 import { analysisApi } from '@/lib/api';
 import { cn, formatPercentage, formatNumber, TAB_COLORS } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 
 const TAB_COLOR = TAB_COLORS.scanner;
+
+interface YearOccurrence {
+  year: number;
+  tradingDay?: number;
+  startDate: string;
+  endDate: string;
+  return?: number;
+  totalReturn?: number;
+  positive: boolean;
+}
 
 interface ScannerMatch {
   startDay: number;
@@ -24,6 +35,11 @@ interface ScannerMatch {
   accuracy: number;
   avgPnl: number;
   totalPnl: number;
+  startDate?: string;
+  endDate?: string;
+  firstMatchDate?: string;
+  lastMatchDate?: string;
+  yearOccurrences?: YearOccurrence[];
 }
 
 interface ScannerResult {
@@ -44,6 +60,49 @@ const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
     <RefreshCw className={cn("animate-spin text-emerald-600", size === 'lg' ? 'h-10 w-10' : 'h-6 w-6')} />
   </div>
 );
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatDayToDate(day: number, month: number = 1, year: number = 2024): string {
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let adjustedDay = day;
+  let adjustedMonth = month;
+  
+  if (day > daysInMonth[month - 1]) {
+    adjustedDay = daysInMonth[month - 1];
+  }
+  
+  const dd = String(adjustedDay).padStart(2, '0');
+  const mm = MONTHS[adjustedMonth - 1];
+  const yyyy = String(year);
+  
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function getDateRange(
+  startDay: number, 
+  endDay: number, 
+  startYear: number, 
+  endYear: number,
+  selectedMonths: number[] = []
+): { startDate: string; endDate: string } {
+  // If no month selected, show "Day X" format (like old software)
+  if (selectedMonths.length === 0) {
+    const yearRange = startYear !== endYear ? `(${startYear}-${endYear})` : `(${startYear})`;
+    return {
+      startDate: `Day ${startDay} ${yearRange}`,
+      endDate: `Day ${endDay} ${yearRange}`,
+    };
+  }
+  
+  // If months selected, use first month and show dates
+  const month = selectedMonths[0];
+  
+  return {
+    startDate: formatDayToDate(startDay, month, startYear),
+    endDate: formatDayToDate(endDay, month, endYear),
+  };
+}
 
 function InfoTooltip({ content }: { content: string }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -104,22 +163,51 @@ export default function ScannerPage() {
   const [startDate, setStartDate] = useState('2016-01-01');
   const [endDate, setEndDate] = useState('2025-12-31');
   const [evenOddYears, setEvenOddYears] = useState<'All' | 'Even' | 'Odd' | 'Leap'>('All');
-  const [specificMonth, setSpecificMonth] = useState(0);
-  const [specificExpiryWeek, setSpecificExpiryWeek] = useState(0);
-  const [specificMondayWeek, setSpecificMondayWeek] = useState(0);
+  const [specificMonths, setSpecificMonths] = useState<number[]>([]);
+  const [specificExpiryWeeks, setSpecificExpiryWeeks] = useState<number[]>([]);
+  const [specificMondayWeeks, setSpecificMondayWeeks] = useState<number[]>([]);
   const [trendType, setTrendType] = useState<'Bullish' | 'Bearish'>('Bullish');
   const [consecutiveDays, setConsecutiveDays] = useState(3);
-  
+
   // Criteria filters (A, B, C, D)
   const [minAccuracy, setMinAccuracy] = useState(60);
   const [minTotalPnl, setMinTotalPnl] = useState(1.5);
   const [minSampleSize, setMinSampleSize] = useState(50);
   const [minAvgPnl, setMinAvgPnl] = useState(0.2);
-  
+
   // Query operations
   const [op12, setOp12] = useState<'AND' | 'OR'>('OR');
   const [op23, setOp23] = useState<'AND' | 'OR'>('OR');
   const [op34, setOp34] = useState<'AND' | 'OR'>('OR');
+
+  // Expand/collapse state - only ONE symbol and ONE match can be expanded at a time
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
+  const [expandedMatchIndex, setExpandedMatchIndex] = useState<number | null>(null);
+  const [expandedMatchPage, setExpandedMatchPage] = useState(1);
+
+  // Toggle expand/collapse for a symbol (auto-collapses others)
+  const toggleSymbolExpand = (symbol: string) => {
+    if (expandedSymbol === symbol) {
+      setExpandedSymbol(null);
+      setExpandedMatchIndex(null);
+      setExpandedMatchPage(1);
+    } else {
+      setExpandedSymbol(symbol);
+      setExpandedMatchIndex(null);
+      setExpandedMatchPage(1);
+    }
+  };
+
+  // Toggle expand/collapse for a match within expanded symbol (auto-collapses other matches)
+  const toggleMatchExpand = (matchIndex: number) => {
+    if (expandedMatchIndex === matchIndex) {
+      setExpandedMatchIndex(null);
+      setExpandedMatchPage(1);
+    } else {
+      setExpandedMatchIndex(matchIndex);
+      setExpandedMatchPage(1);
+    }
+  };
 
   // Fetch available symbols
   const { data: symbolsData } = useQuery({
@@ -134,9 +222,9 @@ export default function ScannerPage() {
 
   // Fetch scanner data
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['scanner', selectedSymbols, startDate, endDate, evenOddYears, specificMonth, 
-                specificExpiryWeek, specificMondayWeek, trendType, consecutiveDays,
-                minAccuracy, minTotalPnl, minSampleSize, minAvgPnl, op12, op23, op34],
+    queryKey: ['scanner', selectedSymbols, startDate, endDate, evenOddYears, specificMonths,
+      specificExpiryWeeks, specificMondayWeeks, trendType, consecutiveDays,
+      minAccuracy, minTotalPnl, minSampleSize, minAvgPnl, op12, op23, op34],
     queryFn: async () => {
       console.log('Scanner request:', {
         symbols: selectedSymbols.length > 0 ? selectedSymbols : undefined,
@@ -144,9 +232,9 @@ export default function ScannerPage() {
         endDate,
         filters: {
           evenOddYears,
-          specificMonth,
-          specificExpiryWeekMonthly: specificExpiryWeek,
-          specificMondayWeekMonthly: specificMondayWeek,
+          specificMonths,
+          specificExpiryWeeksMonthly: specificExpiryWeeks,
+          specificMondayWeeksMonthly: specificMondayWeeks,
         },
         trendType,
         consecutiveDays,
@@ -162,16 +250,16 @@ export default function ScannerPage() {
           },
         },
       });
-      
+
       const response = await analysisApi.scanner({
         symbols: selectedSymbols.length > 0 ? selectedSymbols : undefined,
         startDate,
         endDate,
         filters: {
           evenOddYears,
-          specificMonth,
-          specificExpiryWeekMonthly: specificExpiryWeek,
-          specificMondayWeekMonthly: specificMondayWeek,
+          specificMonths,
+          specificExpiryWeeksMonthly: specificExpiryWeeks,
+          specificMondayWeeksMonthly: specificMondayWeeks,
         },
         trendType,
         consecutiveDays,
@@ -199,7 +287,7 @@ export default function ScannerPage() {
   // Flatten all matches for pagination
   const allMatches = useMemo(() => {
     if (!scannerData?.results) return [];
-    return scannerData.results.flatMap((result, rIdx) => 
+    return scannerData.results.flatMap((result, rIdx) =>
       result.matches.map((match, mIdx) => ({
         ...match,
         symbol: result.symbol,
@@ -209,22 +297,67 @@ export default function ScannerPage() {
     );
   }, [scannerData]);
 
-  // Paginated data
+  // Aggregated data by symbol
+  const aggregatedData = useMemo(() => {
+    if (!scannerData?.results) return [];
+    
+    return scannerData.results.map(result => {
+      const matches = result.matches;
+      const totalSampleSize = matches.reduce((sum, m) => sum + (m.sampleSize || 0), 0);
+      const avgAccuracy = matches.reduce((sum, m) => sum + (m.accuracy || 0), 0) / matches.length;
+      const avgPnl = matches.reduce((sum, m) => sum + (m.avgPnl || 0), 0) / matches.length;
+      const totalPnl = matches.reduce((sum, m) => sum + (m.totalPnl || 0), 0);
+      
+      // Get first and last date range
+      const firstMatchDate = matches[0]?.startDate || `Day ${matches[0]?.startDay}`;
+      const lastMatchDate = matches[matches.length - 1]?.endDate || `Day ${matches[matches.length - 1]?.endDay}`;
+      const firstStartDate = matches[0]?.startDate || '';
+      const firstEndDate = matches[0]?.endDate || '';
+      const lastStartDate = matches[matches.length - 1]?.startDate || '';
+      const lastEndDate = matches[matches.length - 1]?.endDate || '';
+      
+      // Format date range for display
+      let dateRangeStr = '';
+      if (firstStartDate && firstEndDate && lastStartDate && lastEndDate) {
+        // Has actual dates - show dd/mm format
+        dateRangeStr = `${firstStartDate.split('/')[0]}/${firstStartDate.split('/')[1]} - ${firstEndDate.split('/')[0]}/${firstEndDate.split('/')[1]} TO ${lastStartDate.split('/')[0]}/${lastStartDate.split('/')[1]} - ${lastEndDate.split('/')[0]}/${lastEndDate.split('/')[1]}`;
+      } else {
+        // No dates - show Day format
+        dateRangeStr = `Day ${matches[0]?.startDay} - Day ${matches[0]?.endDay} TO Day ${matches[matches.length - 1]?.startDay} - Day ${matches[matches.length - 1]?.endDay}`;
+      }
+      
+      return {
+        symbol: result.symbol,
+        name: result.name,
+        matchCount: matches.length,
+        matches: matches.map((m, idx) => ({ ...m, mIdx: idx })),
+        totalSampleSize,
+        avgAccuracy,
+        avgPnl,
+        totalPnl,
+        dateRange: dateRangeStr,
+        firstMatchDate,
+        lastMatchDate,
+      };
+    });
+  }, [scannerData]);
+
+  // Paginated data (aggregated - one row per symbol)
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return allMatches.slice(start, start + pageSize);
-  }, [allMatches, currentPage, pageSize]);
+    return aggregatedData.slice(start, start + pageSize);
+  }, [aggregatedData, currentPage, pageSize]);
 
-  const totalPages = Math.ceil(allMatches.length / pageSize);
+  const totalPages = Math.ceil(aggregatedData.length / pageSize);
 
   // Computed stats for summary cards
   const stats = useMemo(() => {
     if (allMatches.length === 0) return null;
-    
+
     const totalAccuracy = allMatches.reduce((sum, m) => sum + (m.accuracy || 0), 0);
     const totalPnl = allMatches.reduce((sum, m) => sum + (m.totalPnl || 0), 0);
     const avgPnl = allMatches.reduce((sum, m) => sum + (m.avgPnl || 0), 0);
-    
+
     return {
       avgAccuracy: totalAccuracy / allMatches.length,
       avgTotalPnl: totalPnl / allMatches.length,
@@ -235,9 +368,9 @@ export default function ScannerPage() {
   // Heatmap data - aggregated by symbol and startDay
   const heatmapData = useMemo(() => {
     if (!scannerData?.results) return [];
-    
+
     const heatmap: Record<string, { accuracy: number[]; totalPnl: number[]; avgPnl: number[]; count: number }> = {};
-    
+
     scannerData.results.forEach((result) => {
       result.matches.forEach((match) => {
         const key = `${result.symbol}-${match.startDay}-${match.endDay}`;
@@ -276,7 +409,7 @@ export default function ScannerPage() {
         // Group by startDay, endDay, and accuracy range (within 5%)
         const accuracyRange = Math.floor(match.accuracy / 5) * 5;
         const key = `${match.startDay}-${match.endDay}-${accuracyRange}`;
-        
+
         if (!patterns[key]) {
           patterns[key] = { symbols: [], matches: [] };
         }
@@ -292,7 +425,7 @@ export default function ScannerPage() {
         const [startDay, endDay] = key.split('-').map(Number);
         const avgAccuracy = data.matches.reduce((a, m) => a + m.accuracy, 0) / data.matches.length;
         const avgPnl = data.matches.reduce((a, m) => a + m.totalPnl, 0) / data.matches.length;
-        
+
         return {
           startDay,
           endDay,
@@ -326,9 +459,9 @@ export default function ScannerPage() {
     setStartDate('2016-01-01');
     setEndDate('2025-12-31');
     setEvenOddYears('All');
-    setSpecificMonth(0);
-    setSpecificExpiryWeek(0);
-    setSpecificMondayWeek(0);
+    setSpecificMonths([]);
+    setSpecificExpiryWeeks([]);
+    setSpecificMondayWeeks([]);
     setTrendType('Bullish');
     setConsecutiveDays(3);
     setMinAccuracy(60);
@@ -352,10 +485,10 @@ export default function ScannerPage() {
 
   const downloadCSV = () => {
     if (!scannerData?.results) return;
-    
+
     const headers = ['Symbol', 'Match #', 'Start Day', 'End Day', 'Total Days', 'Sample Size', 'Accuracy %', 'Avg PnL %', 'Total PnL %'];
     const rows: string[][] = [];
-    
+
     scannerData.results.forEach((result) => {
       result.matches.forEach((match, mIdx) => {
         rows.push([
@@ -371,7 +504,7 @@ export default function ScannerPage() {
         ]);
       });
     });
-    
+
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -513,60 +646,198 @@ export default function ScannerPage() {
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50 sticky top-0">
                         <tr className="border-b border-slate-200">
+                          <th className="text-left py-3 px-4 font-semibold text-slate-600 w-8"></th>
                           <th className="text-left py-3 px-4 font-semibold text-slate-600">Symbol</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-600">Match #</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-600">Start Day</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-600">End Day</th>
+                          <th className="text-right py-3 px-4 font-semibold text-slate-600">Matches</th>
+                          <th className="text-right py-3 px-4 font-semibold text-slate-600">Date Range</th>
                           <th className="text-right py-3 px-4 font-semibold text-slate-600">Days</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-600">Sample Size</th>
+                          <th className="text-right py-3 px-4 font-semibold text-slate-600">Sample</th>
                           <th className="text-right py-3 px-4 font-semibold text-slate-600">Accuracy</th>
                           <th className="text-right py-3 px-4 font-semibold text-slate-600">Avg PnL</th>
                           <th className="text-right py-3 px-4 font-semibold text-slate-600">Total PnL</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {paginatedData.map((match, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50">
-                            <td className="py-3 px-4">
-                              <div className="font-medium text-slate-900">{match.symbol}</div>
-                            </td>
-                            <td className="py-3 px-4 text-right text-slate-500">
-                              {match.mIdx + 1}
-                            </td>
-                            <td className="py-3 px-4 text-right text-slate-600">
-                              Day {match.startDay}
-                            </td>
-                            <td className="py-3 px-4 text-right text-slate-600">
-                              Day {match.endDay}
-                            </td>
-                            <td className="py-3 px-4 text-right text-slate-600">
-                              {match.totalDays}
-                            </td>
-                            <td className="py-3 px-4 text-right text-slate-600">
-                              {match.sampleSize}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <span className={cn(
-                                "font-medium",
-                                (match.accuracy ?? 0) >= 50 ? "text-emerald-600" : "text-red-600"
-                              )}>
-                                {formatPercentage(match.accuracy ?? 0)}
-                              </span>
-                            </td>
-                            <td className={cn(
-                              "py-3 px-4 text-right font-medium",
-                              (match.avgPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
-                            )}>
-                              {formatPercentage(match.avgPnl ?? 0)}
-                            </td>
-                            <td className={cn(
-                              "py-3 px-4 text-right font-bold",
-                              (match.totalPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
-                            )}>
-                              {formatPercentage(match.totalPnl ?? 0)}
-                            </td>
-                          </tr>
-                        ))}
+                        {paginatedData.map((aggRow, idx) => {
+                          const isSymbolExpanded = expandedSymbol === aggRow.symbol;
+                          return (
+                            <React.Fragment key={idx}>
+                              {/* Summary Row */}
+                              <tr className="hover:bg-slate-50">
+                                <td className="py-3 px-4">
+                                  <button
+                                    onClick={() => toggleSymbolExpand(aggRow.symbol)}
+                                    className="p-1 hover:bg-slate-100 rounded"
+                                  >
+                                    {isSymbolExpanded ? (
+                                      <ChevronDown className="h-4 w-4 text-slate-500" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-slate-500" />
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="font-medium text-slate-900">{aggRow.symbol}</div>
+                                </td>
+                                <td className="py-3 px-4 text-right text-slate-600">
+                                  {aggRow.matchCount}
+                                </td>
+                                <td className="py-3 px-4 text-right text-slate-500 text-[10px]">
+                                  {aggRow.dateRange || `${aggRow.firstMatchDate} - ${aggRow.lastMatchDate}`}
+                                </td>
+                                <td className="py-3 px-4 text-right text-slate-600">
+                                  {aggRow.matches[0]?.totalDays || 3}
+                                </td>
+                                <td className="py-3 px-4 text-right text-slate-600 font-medium">
+                                  {aggRow.totalSampleSize}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <span className={cn(
+                                    "font-medium",
+                                    (aggRow.avgAccuracy ?? 0) >= 50 ? "text-emerald-600" : "text-red-600"
+                                  )}>
+                                    {formatPercentage(aggRow.avgAccuracy ?? 0)}
+                                  </span>
+                                </td>
+                                <td className={cn(
+                                  "py-3 px-4 text-right font-medium",
+                                  (aggRow.avgPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                                )}>
+                                  {formatPercentage(aggRow.avgPnl ?? 0)}
+                                </td>
+                                <td className={cn(
+                                  "py-3 px-4 text-right font-bold",
+                                  (aggRow.totalPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                                )}>
+                                  {formatPercentage(aggRow.totalPnl ?? 0)}
+                                </td>
+                              </tr>
+                              
+                              {/* Level 2: Match List (when symbol is expanded) */}
+                              {isSymbolExpanded && aggRow.matches.map((match, mIdx) => {
+                                const isMatchExpanded = expandedMatchIndex === mIdx;
+                                const yearOccurrences = match.yearOccurrences || [];
+                                const yearsPerPage = 10;
+                                const totalPages = Math.ceil(yearOccurrences.length / yearsPerPage);
+                                const paginatedYears = yearOccurrences.slice(
+                                  (expandedMatchPage - 1) * yearsPerPage,
+                                  expandedMatchPage * yearsPerPage
+                                );
+                                
+                                return (
+                                  <React.Fragment key={`${idx}-${mIdx}`}>
+                                    {/* Match Row */}
+                                    <tr className="bg-slate-50 hover:bg-slate-100">
+                                      <td className="py-2 px-4 pl-4">
+                                        <button
+                                          onClick={() => toggleMatchExpand(mIdx)}
+                                          className="p-0.5 hover:bg-slate-200 rounded"
+                                        >
+                                          {isMatchExpanded ? (
+                                            <ChevronDown className="h-3 w-3 text-slate-500" />
+                                          ) : (
+                                            <ChevronRight className="h-3 w-3 text-slate-500" />
+                                          )}
+                                        </button>
+                                      </td>
+                                      <td className="py-2 px-2 pl-2">
+                                        <span className="text-slate-500 font-medium">
+                                          {aggRow.symbol} - {mIdx + 1}.
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-2"></td>
+                                      <td className="py-2 px-2 text-right">
+                                        <span className="text-emerald-600 font-bold text-sm">
+                                          {match.startDate || `Day ${match.startDay}`} - {match.endDate || `Day ${match.endDay}`}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-2 text-right text-slate-600">
+                                        {match.totalDays}
+                                      </td>
+                                      <td className="py-2 px-2 text-right text-slate-600 font-medium">
+                                        {match.sampleSize}
+                                      </td>
+                                      <td className="py-2 px-2 text-right">
+                                        <span className={cn(
+                                          (match.accuracy ?? 0) >= 50 ? "text-emerald-600" : "text-red-600"
+                                        )}>
+                                          {formatPercentage(match.accuracy ?? 0)}
+                                        </span>
+                                      </td>
+                                      <td className={cn(
+                                        "py-2 px-2 text-right",
+                                        (match.avgPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                                      )}>
+                                        {formatPercentage(match.avgPnl ?? 0)}
+                                      </td>
+                                      <td className={cn(
+                                        "py-2 px-2 text-right font-medium",
+                                        (match.totalPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                                      )}>
+                                        {formatPercentage(match.totalPnl ?? 0)}
+                                      </td>
+                                    </tr>
+                                    
+                                    {/* Level 3: Year Occurrences (when match is expanded) */}
+                                    {isMatchExpanded && (
+                                      <>
+                                        {paginatedYears.map((yearData, yearIdx) => {
+                                          const returnValue = yearData.totalReturn ?? 0;
+                                          return (
+                                          <tr key={`${idx}-${mIdx}-${yearIdx}`} className="bg-white hover:bg-slate-50">
+                                            <td className="py-1 px-4"></td>
+                                            <td className="py-1 px-2 pl-4 text-slate-400 text-xs" colSpan={3}>
+                                              {yearData.startDate} - {yearData.endDate}
+                                            </td>
+                                            <td className="py-1 px-2 text-right text-slate-500 text-xs">
+                                              {yearData.positive ? 'Positive' : 'Negative'}
+                                            </td>
+                                            <td className="py-1 px-2"></td>
+                                            <td className={cn(
+                                              "py-1 px-2 text-right font-medium text-xs",
+                                              returnValue >= 0 ? "text-emerald-600" : "text-red-600"
+                                            )}>
+                                              {returnValue > 0 ? '+' : ''}{returnValue.toFixed(2)}%
+                                            </td>
+                                            <td className="py-1 px-2"></td>
+                                          </tr>
+                                          );
+                                        })}
+                                        
+                                        {/* Pagination for years */}
+                                        {totalPages > 1 && (
+                                          <tr className="bg-slate-100">
+                                            <td className="py-2 px-4" colSpan={9}>
+                                              <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                  onClick={() => setExpandedMatchPage(p => Math.max(1, p - 1))}
+                                                  disabled={expandedMatchPage === 1}
+                                                  className="px-2 py-1 text-xs bg-white border rounded disabled:opacity-50"
+                                                >
+                                                  Prev
+                                                </button>
+                                                <span className="text-xs text-slate-500">
+                                                  {expandedMatchPage} / {totalPages}
+                                                </span>
+                                                <button
+                                                  onClick={() => setExpandedMatchPage(p => Math.min(totalPages, p + 1))}
+                                                  disabled={expandedMatchPage === totalPages}
+                                                  className="px-2 py-1 text-xs bg-white border rounded disabled:opacity-50"
+                                                >
+                                                  Next
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -575,7 +846,7 @@ export default function ScannerPage() {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between p-4 border-t border-slate-100">
                       <div className="text-xs text-slate-500">
-                        Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, allMatches.length)} of {allMatches.length} results
+                        Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, aggregatedData.length)} of {aggregatedData.length} symbols
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -635,7 +906,7 @@ export default function ScannerPage() {
                                   key={idx}
                                   className="w-10 h-10 rounded flex items-center justify-center text-[10px] font-medium cursor-pointer hover:ring-2 hover:ring-emerald-400 transition-all"
                                   style={{
-                                    backgroundColor: heatmapMetric === 'accuracy' 
+                                    backgroundColor: heatmapMetric === 'accuracy'
                                       ? value >= 50 ? `rgba(16, 185, 129, ${intensity})` : `rgba(239, 68, 68, ${intensity})`
                                       : value >= 0 ? `rgba(16, 185, 129, ${intensity})` : `rgba(239, 68, 68, ${intensity})`,
                                     color: intensity > 0.5 ? 'white' : 'black',
@@ -696,7 +967,7 @@ export default function ScannerPage() {
                             <div className="text-xs text-slate-500">Accuracy</div>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center justify-between text-xs mb-3">
                           <span className="text-slate-500">Avg PnL:</span>
                           <span className={cn(
@@ -830,66 +1101,58 @@ export default function ScannerPage() {
         <FilterSection title="Month & Week Filters" delay={0.1}>
           <div className="space-y-3 pt-1">
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Specific Month</label>
-                <span className="text-[10px] font-bold text-slate-400">{specificMonth === 0 ? 'Disabled' : specificMonth}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={12}
-                step={1}
-                value={specificMonth}
-                onChange={(e) => setSpecificMonth(parseInt(e.target.value))}
-                className="w-full"
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Specific Months</label>
+              <MultiSelect
+                options={[
+                  { value: 1, label: 'January' },
+                  { value: 2, label: 'February' },
+                  { value: 3, label: 'March' },
+                  { value: 4, label: 'April' },
+                  { value: 5, label: 'May' },
+                  { value: 6, label: 'June' },
+                  { value: 7, label: 'July' },
+                  { value: 8, label: 'August' },
+                  { value: 9, label: 'September' },
+                  { value: 10, label: 'October' },
+                  { value: 11, label: 'November' },
+                  { value: 12, label: 'December' },
+                ]}
+                selected={specificMonths}
+                onChange={setSpecificMonths}
+                placeholder="All Months"
               />
-              <div className="flex justify-between text-[9px] text-slate-400 mt-1">
-                <span>Off</span>
-                <span>Jan</span>
-                <span>Dec</span>
-              </div>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Expiry Week (Monthly)</label>
-                <span className="text-[10px] font-bold text-slate-400">{specificExpiryWeek === 0 ? 'Disabled' : specificExpiryWeek}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={5}
-                step={1}
-                value={specificExpiryWeek}
-                onChange={(e) => setSpecificExpiryWeek(parseInt(e.target.value))}
-                className="w-full"
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Expiry Week (Monthly)</label>
+              <MultiSelect
+                options={[
+                  { value: 1, label: '1st Week' },
+                  { value: 2, label: '2nd Week' },
+                  { value: 3, label: '3rd Week' },
+                  { value: 4, label: '4th Week' },
+                  { value: 5, label: '5th Week' },
+                ]}
+                selected={specificExpiryWeeks}
+                onChange={setSpecificExpiryWeeks}
+                placeholder="All Weeks"
               />
-              <div className="flex justify-between text-[9px] text-slate-400 mt-1">
-                <span>Off</span>
-                <span>1st</span>
-                <span>5th</span>
-              </div>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Monday Week (Monthly)</label>
-                <span className="text-[10px] font-bold text-slate-400">{specificMondayWeek === 0 ? 'Disabled' : specificMondayWeek}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={5}
-                step={1}
-                value={specificMondayWeek}
-                onChange={(e) => setSpecificMondayWeek(parseInt(e.target.value))}
-                className="w-full"
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Monday Week (Monthly)</label>
+              <MultiSelect
+                options={[
+                  { value: 1, label: '1st Week' },
+                  { value: 2, label: '2nd Week' },
+                  { value: 3, label: '3rd Week' },
+                  { value: 4, label: '4th Week' },
+                  { value: 5, label: '5th Week' },
+                ]}
+                selected={specificMondayWeeks}
+                onChange={setSpecificMondayWeeks}
+                placeholder="All Weeks"
               />
-              <div className="flex justify-between text-[9px] text-slate-400 mt-1">
-                <span>Off</span>
-                <span>1st</span>
-                <span>5th</span>
-              </div>
             </div>
           </div>
         </FilterSection>
@@ -1022,7 +1285,7 @@ export default function ScannerPage() {
             <p className="text-[10px] text-slate-500">
               Combine criteria with AND/OR operations
             </p>
-            
+
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-slate-600">A</span>
               <select

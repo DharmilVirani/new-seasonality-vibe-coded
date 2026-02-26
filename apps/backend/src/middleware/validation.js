@@ -121,9 +121,9 @@ const scannerRequestSchema = z.object({
   endDate: dateSchema,
   filters: z.object({
     evenOddYears: z.enum(['All', 'Even', 'Odd', 'Leap']).default('All'),
-    specificMonth: z.number().int().min(0).max(12).default(0),
-    specificExpiryWeek: z.number().int().min(0).max(5).default(0),
-    specificMondayWeek: z.number().int().min(0).max(5).default(0),
+    specificMonths: z.array(z.number().int().min(1).max(12)).default([]),
+    specificExpiryWeeksMonthly: z.array(z.number().int().min(1).max(5)).default([]),
+    specificMondayWeeksMonthly: z.array(z.number().int().min(1).max(5)).default([]),
   }).optional(),
   trendType: z.enum(['Bullish', 'Bearish']).default('Bullish'),
   consecutiveDays: z.number().int().min(2).max(10).default(3),

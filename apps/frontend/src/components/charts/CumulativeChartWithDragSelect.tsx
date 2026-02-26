@@ -389,8 +389,8 @@ export function CumulativeChartWithDragSelect({
         </div>
       )}
 
-      {/* Instruction hint */}
-      {!selection.isActive && !timeRangeSelection.isActive && (
+      {/* Instruction hint - only show when drag is enabled */}
+      {enableDragSelect && !selection.isActive && !timeRangeSelection.isActive && (
         <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg shadow-sm px-3 py-1.5 text-xs text-slate-600 flex items-center gap-2">
           <MousePointerClick className="h-3.5 w-3.5" style={{ color: chartColor }} />
           <span>Click and drag to select time range</span>
@@ -402,16 +402,18 @@ export function CumulativeChartWithDragSelect({
         ref={chartContainerRef}
         className={cn(
           "h-full w-full relative",
-          selection.isDragging ? "cursor-col-resize" : "cursor-crosshair"
+          enableDragSelect && selection.isDragging ? "cursor-col-resize" : enableDragSelect ? "cursor-crosshair" : ""
         )}
       >
-        {/* Drag selection overlay */}
-        <DragSelectOverlay
-          chartRef={chartRef}
-          selection={selection}
-          containerRef={chartContainerRef}
-          color={chartColor}
-        />
+        {/* Drag selection overlay - only render when enabled */}
+        {enableDragSelect && (
+          <DragSelectOverlay
+            chartRef={chartRef}
+            selection={selection}
+            containerRef={chartContainerRef}
+            color={chartColor}
+          />
+        )}
 
         {/* Regular tooltip (only show when not selecting) */}
         {tooltip && tooltip.visible && !selection.isDragging && (
