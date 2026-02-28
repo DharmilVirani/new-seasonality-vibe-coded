@@ -7,13 +7,21 @@ import {
   ChevronDown, ChevronRight, ChevronLeft,
   RefreshCw, Download,
   Search, Settings2,
-  Table2, Flame, Network
+  Table2, Flame, Network,
+  SlidersHorizontal
 } from 'lucide-react';
 import { analysisApi } from '@/lib/api';
 import { cn, formatPercentage, formatNumber, TAB_COLORS } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
+import { FilterSection } from '@/components/layout/RightFilterConsole';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 const TAB_COLOR = TAB_COLORS.scanner;
 
@@ -151,7 +159,8 @@ function InfoTooltip({ content }: { content: string }) {
 }
 
 export default function ScannerPage() {
-  const [filterOpen, setFilterOpen] = useState(true);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'heatmap' | 'cross'>('table');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
@@ -184,6 +193,9 @@ export default function ScannerPage() {
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
   const [expandedMatchIndex, setExpandedMatchIndex] = useState<number | null>(null);
   const [expandedMatchPage, setExpandedMatchPage] = useState(1);
+
+  // Year occurrences filter toggle - default to positive only (more useful for traders)
+  const [showPositiveOnly, setShowPositiveOnly] = useState(true);
 
   // Toggle expand/collapse for a symbol (auto-collapses others)
   const toggleSymbolExpand = (symbol: string) => {
@@ -473,11 +485,6 @@ export default function ScannerPage() {
     setOp34('OR');
   };
 
-  const totalPatterns = scannerData?.results?.reduce(
-    (sum: number, r: ScannerResult) => sum + r.matchCount,
-    0
-  ) ?? 0;
-
   const getBestMatch = (result: ScannerResult) => {
     if (!result.matches || result.matches.length === 0) return null;
     return result.matches[0];
@@ -554,7 +561,7 @@ export default function ScannerPage() {
         <div className="flex-1 overflow-y-auto p-6 space-y-5 max-w-[1800px] mx-auto w-full">
           {/* Summary Cards */}
           {scannerData && stats && (
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
                 <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Symbols Scanned</div>
                 <div className="text-2xl font-bold text-slate-900">{scannerData.totalSymbols}</div>
@@ -562,10 +569,6 @@ export default function ScannerPage() {
               <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
                 <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Matches Found</div>
                 <div className="text-2xl font-bold text-emerald-600">{scannerData.matchedSymbols}</div>
-              </div>
-              <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
-                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Total Patterns</div>
-                <div className="text-2xl font-bold text-slate-900">{totalPatterns}</div>
               </div>
               <div className="bg-white rounded-lg p-5 border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
                 <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Avg Accuracy</div>
@@ -583,6 +586,97 @@ export default function ScannerPage() {
               </div>
             </div>
           )}
+
+          {/* Compact Filter Row */}
+          <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+            {/* Symbol Select */}
+            <div className="min-w-[140px]">
+              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Symbol</label>
+              <select
+                value={selectedSymbols.length === 1 ? selectedSymbols[0] : ''}
+                onChange={(e) => setSelectedSymbols(e.target.value ? [e.target.value] : [])}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 bg-white"
+              >
+                <option value="">All Symbols</option>
+                {availableSymbols.map((s: { symbol: string }) => (
+                  <option key={s.symbol} value={s.symbol}>{s.symbol}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Range */}
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Start</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400"
+                />
+              </div>
+              <span className="text-slate-400 pb-1.5">→</span>
+              <div>
+                <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">End</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400"
+                />
+              </div>
+            </div>
+
+            {/* Year Type */}
+            <div className="min-w-[100px]">
+              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Year Type</label>
+              <select
+                value={evenOddYears}
+                onChange={(e) => setEvenOddYears(e.target.value as any)}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 bg-white"
+              >
+                <option value="All">All Years</option>
+                <option value="Even">Even</option>
+                <option value="Odd">Odd</option>
+                <option value="Leap">Leap</option>
+              </select>
+            </div>
+
+            {/* Month */}
+            <div className="min-w-[120px]">
+              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Month</label>
+              <select
+                value={specificMonths.join(',')}
+                onChange={(e) => setSpecificMonths(e.target.value ? e.target.value.split(',').map(Number) : [])}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 bg-white"
+              >
+                <option value="">All Months</option>
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+            </div>
+
+            {/* Filter Button */}
+            <Button
+              onClick={() => setFilterModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-2 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 ml-auto"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+            </Button>
+          </div>
 
           {/* Loading State */}
           {isLoading || isFetching ? (
@@ -716,10 +810,14 @@ export default function ScannerPage() {
                               {/* Level 2: Match List (when symbol is expanded) */}
                               {isSymbolExpanded && aggRow.matches.map((match, mIdx) => {
                                 const isMatchExpanded = expandedMatchIndex === mIdx;
-                                const yearOccurrences = match.yearOccurrences || [];
+                                const allYearOccurrences = match.yearOccurrences || [];
+                                // Filter based on toggle
+                                const filteredYearOccurrences = showPositiveOnly 
+                                  ? allYearOccurrences.filter(y => y.positive)
+                                  : allYearOccurrences;
                                 const yearsPerPage = 10;
-                                const totalPages = Math.ceil(yearOccurrences.length / yearsPerPage);
-                                const paginatedYears = yearOccurrences.slice(
+                                const totalPages = Math.ceil(filteredYearOccurrences.length / yearsPerPage);
+                                const paginatedYears = filteredYearOccurrences.slice(
                                   (expandedMatchPage - 1) * yearsPerPage,
                                   expandedMatchPage * yearsPerPage
                                 );
@@ -786,7 +884,10 @@ export default function ScannerPage() {
                                           return (
                                           <tr key={`${idx}-${mIdx}-${yearIdx}`} className="bg-white hover:bg-slate-50">
                                             <td className="py-1 px-4"></td>
-                                            <td className="py-1 px-2 pl-4 text-slate-400 text-xs" colSpan={3}>
+                                            <td className="py-1 px-2 pl-4 text-slate-400 text-xs">
+                                              {yearData.year}
+                                            </td>
+                                            <td className="py-1 px-2 text-slate-500 text-xs" colSpan={2}>
                                               {yearData.startDate} - {yearData.endDate}
                                             </td>
                                             <td className="py-1 px-2 text-right text-slate-500 text-xs">
@@ -1008,18 +1109,21 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {/* Right Filter Console */}
-      <RightFilterConsole
-        isOpen={filterOpen}
-        onToggle={() => setFilterOpen(!filterOpen)}
-        onApply={handleScan}
-        onClear={handleClearFilters}
-        isLoading={isFetching}
-        title="Scanner Filters"
-        subtitle="Configure Pattern Search"
-        primaryColor={TAB_COLOR.accent}
-      >
-        <FilterSection title="Symbol" defaultOpen delay={0}>
+      {/* Filter Modal */}
+      <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SlidersHorizontal className="h-5 w-5 text-emerald-600" />
+              Scanner Filters
+            </DialogTitle>
+            <DialogDescription>
+              Configure pattern search criteria
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+            <FilterSection title="Symbol" defaultOpen delay={0}>
           <div className="space-y-2 pt-1">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
               Select Symbols (leave empty for all)
@@ -1322,7 +1426,39 @@ export default function ScannerPage() {
             </div>
           </div>
         </FilterSection>
-      </RightFilterConsole>
+          </div>
+          
+          <div className="flex items-center gap-3 pt-4 border-t">
+            <Button
+              onClick={handleClearFilters}
+              variant="outline"
+              className="flex-1"
+            >
+              Clear All
+            </Button>
+            <Button
+              onClick={() => {
+                handleScan();
+                setFilterModalOpen(false);
+              }}
+              disabled={isFetching}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+            >
+              {isFetching ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Scanner
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

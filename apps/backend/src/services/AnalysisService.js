@@ -1500,17 +1500,22 @@ class AnalysisService {
 
         if (filteredData.length === 0) continue;
 
-        // Group by tradingMonthDay and track actual dates with year
+        // Group by tradingMonthDay and track actual dates with year and month
         const dayGroups = {};
         filteredData.forEach(record => {
           const day = record.tradingMonthDay;
-          const year = new Date(record.date).getFullYear();
+          const date = new Date(record.date);
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1; // 1-12
+          const yearMonth = `${year}-${month}`;
           if (!dayGroups[day]) {
             dayGroups[day] = {
               day,
               returns: [],
               dates: [],
               years: [],
+              months: [],
+              yearMonths: [],
               positiveCount: 0,
               negativeCount: 0,
               totalCount: 0
@@ -1519,6 +1524,8 @@ class AnalysisService {
           dayGroups[day].returns.push(record.returnPercentage || 0);
           dayGroups[day].dates.push(record.date);
           dayGroups[day].years.push(year);
+          dayGroups[day].months.push(month);
+          dayGroups[day].yearMonths.push(yearMonth);
           dayGroups[day].totalCount++;
           if ((record.returnPercentage || 0) > 0) {
             dayGroups[day].positiveCount++;
@@ -1554,34 +1561,32 @@ class AnalysisService {
             }
           };
 
-          // Build year occurrences array
-          const yearOccurrences = {};
+          // Build year occurrences array - take only ONE occurrence per year-month combination
+          const yearMonthSeen = new Set();
+          const yearList = [];
+          
           group.dates.forEach((date, idx) => {
+            const yearMonth = group.yearMonths[idx];
             const year = group.years[idx];
+            const month = group.months[idx];
             const returnPct = group.returns[idx];
-            if (!yearOccurrences[year]) {
-              yearOccurrences[year] = {
+            
+            // Only take first occurrence for each year-month
+            if (!yearMonthSeen.has(yearMonth)) {
+              yearMonthSeen.add(yearMonth);
+              yearList.push({
                 year,
-                dates: [],
-                returns: [],
-                positive: false
-              };
+                month,
+                startDate: formatDate(date),
+                endDate: formatDate(date), // Same as start for single day
+                totalReturn: returnPct,
+                positive: returnPct > 0
+              });
             }
-            yearOccurrences[year].dates.push(formatDate(date));
-            yearOccurrences[year].returns.push(returnPct);
           });
-
-          // For each year, get the date for this trading day
-          const yearList = Object.values(yearOccurrences).map(y => {
-            const totalReturn = y.returns.reduce((a, b) => a + b, 0);
-            return {
-              year: y.year,
-              startDate: y.dates[0] || '',
-              endDate: y.dates[y.dates.length - 1] || '',
-              totalReturn: totalReturn,
-              positive: totalReturn > 0
-            };
-          }).sort((a, b) => a.year - b.year);
+          
+          // Sort by year then month
+          yearList.sort((a, b) => a.year - b.year || a.month - b.month);
 
           return {
             tradingDay: group.day,
@@ -1707,57 +1712,57 @@ class AnalysisService {
       }
 
       if (passes) {
-        // Group year occurrences by year and calculate combined return for the pattern
-        const yearPatternMap = {};
+        // For year occurrences - show ALL year-months (both positive and negative) to match old software
+        // Show correct date range for the specific trading days
+        const yearOccurrences = [];
         
-        // For each trading day in the chunk, aggregate by year
-        chunk.forEach((day, dayIdx) => {
-          if (day.yearOccurrences) {
-            day.yearOccurrences.forEach(y => {
-              if (!yearPatternMap[y.year]) {
-                yearPatternMap[y.year] = {
-                  year: y.year,
-                  startDate: '',
-                  endDate: '',
-                  returns: [],
-                  positiveDays: 0,
-                  negativeDays: 0
-                };
+        // Get all year-month combinations from the first day in chunk
+        const firstDayYearMonths = chunk[0].yearOccurrences || [];
+        
+        firstDayYearMonths.forEach(firstDayYM => {
+          const year = firstDayYM.year;
+          const month = firstDayYM.month;
+          let allPositive = true;
+          let anyNegative = false;
+          let totalReturn = 0;
+          let startDate = '';
+          let endDate = '';
+          
+          // Check each trading day in the chunk for this same year-month
+          chunk.forEach(day => {
+            const dayData = day.yearOccurrences?.find(y => y.year === year && y.month === month);
+            if (!dayData) {
+              allPositive = false;
+              anyNegative = true;
+            } else {
+              totalReturn += dayData.totalReturn;
+              if (dayData.totalReturn <= 0) {
+                anyNegative = true;
               }
-              // Track start and end dates for this year's pattern
-              if (!yearPatternMap[y.year].startDate || y.startDate < yearPatternMap[y.year].startDate) {
-                yearPatternMap[y.year].startDate = y.startDate;
-              }
-              if (!yearPatternMap[y.year].endDate || y.endDate > yearPatternMap[y.year].endDate) {
-                yearPatternMap[y.year].endDate = y.endDate;
-              }
-              // Add the return for this trading day
-              yearPatternMap[y.year].returns.push(y.totalReturn);
-              if (y.totalReturn > 0) yearPatternMap[y.year].positiveDays++;
-              else if (y.totalReturn < 0) yearPatternMap[y.year].negativeDays++;
-            });
-          }
+              if (!startDate) startDate = dayData.startDate;
+              endDate = dayData.endDate;
+            }
+          });
+          
+          // Include ALL year-months (both positive and negative) - match old software
+          yearOccurrences.push({
+            year,
+            month,
+            startDate,
+            endDate,
+            totalReturn,
+            positive: totalReturn > 0
+          });
         });
 
-        // Convert to array with combined return
-        const yearOccurrences = Object.values(yearPatternMap).map(y => {
-          const totalReturn = y.returns.reduce((sum, r) => sum + r, 0);
-          // Pattern is positive if majority of days are positive
-          const positive = y.positiveDays >= y.negativeDays;
-          return {
-            year: y.year,
-            startDate: y.startDate,
-            endDate: y.endDate,
-            totalReturn: totalReturn,
-            positive: positive
-          };
-        }).sort((a, b) => a.year - b.year);
+        // Sort by year then month
+        yearOccurrences.sort((a, b) => a.year - b.year || a.month - b.month);
 
         chunks.push({
           startDay: chunk[0].tradingDay,
           endDay: chunk[consecutiveDays - 1].tradingDay,
           totalDays: consecutiveDays,
-          sampleSize: chunk[0].allCount, // Sample from first day only - matches old software
+          sampleSize: chunk[0].allCount, // Original count - matches old software
           accuracy: avgAccuracy,
           avgPnl,
           totalPnl,
@@ -1766,7 +1771,7 @@ class AnalysisService {
           endDate: chunk[chunk.length - 1].lastDate,
           firstMatchDate: chunk[0].firstDate,
           lastMatchDate: chunk[chunk.length - 1].lastDate,
-          // Add year occurrences for drill-down - grouped by year with combined return
+          // Add year occurrences for drill-down - ALL year-months (positive + negative)
           yearOccurrences: yearOccurrences
         });
       }
