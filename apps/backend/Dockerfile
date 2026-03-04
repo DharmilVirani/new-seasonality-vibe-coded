@@ -12,11 +12,13 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install all dependencies
-RUN npm ci --no-audit --progress=false --fetch-retries=5 --fetch-timeout=600000
+# Install dependencies and temporarily relax TLS validation for corporate MITM proxies
+RUN npm config set strict-ssl false && \
+    npm ci --no-audit --progress=false --fetch-retries=5 --fetch-timeout=600000 && \
+    npm install prisma@5.22.0 --no-save --no-audit --progress=false --fetch-retries=5 --fetch-timeout=600000
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma client (TLS workaround for in-house cert interception)
+RUN NODE_TLS_REJECT_UNAUTHORIZED=0 npx prisma generate
 
 # Debug: List generated Prisma files
 RUN echo "=== Prisma client files ===" && \

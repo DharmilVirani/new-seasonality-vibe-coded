@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
+    "db:seed:baskets": "node scripts/seed-basket-groups.js",
     "db:studio": "prisma studio",
     "migrate:special-days": "node scripts/migrate-special-days.js",
     "worker": "node src/jobs/worker.js",

@@ -62,6 +62,7 @@ model User {
   uploadBatches     UploadBatch[]
   userPreferences   UserPreferences?
   analysisResults   AnalysisResult[]
+  basketGroups      BasketGroup[]
   
   @@index([email])
   @@index([subscriptionTier])
@@ -183,6 +184,38 @@ model Ticker {
   @@index([exchange])
 }
 
+model BasketGroup {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  description String?
+  ownerId     Int?
+  isSystem    Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  symbols     BasketGroupSymbol[]
+  owner       User?               @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerId, name])
+  @@index([ownerId, name])
+  @@index([isSystem])
+  @@index([name])
+  @@map("basket_groups")
+}
+
+model BasketGroupSymbol {
+  id            Int        @id @default(autoincrement())
+  basketGroupId Int
+  symbol        String
+  position      Int        @default(0)
+  createdAt     DateTime   @default(now())
+  basketGroup   BasketGroup @relation(fields: [basketGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([basketGroupId, symbol])
+  @@index([basketGroupId, position])
+  @@index([symbol])
+  @@map("basket_group_symbols")
+}
+
 // =====================================================
 // TIME-SERIES DATA TABLES (Optimized for TimescaleDB)
 // PHASE 1: Current Implementation - OHLCV + OpenInterest only
@@ -290,6 +323,12 @@ model DailySeasonalityData {
   @@index([date])
   @@index([tickerId])
   @@index([tickerId, date])
+  @@index([tickerId, date, tradingMonthDay])
+  @@index([tickerId, date, calendarMonthDay])
+  @@index([tickerId, date, weekday])
+  @@index([tickerId, date, expiryWeekNumberMonthly])
+  @@index([tickerId, date, mondayWeekNumberMonthly])
+  @@index([tickerId, date, evenYear])
   @@map("daily_seasonality_data")
 }
 

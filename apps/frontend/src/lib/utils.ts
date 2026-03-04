@@ -81,10 +81,10 @@ export const TAB_COLORS = {
     gradient: 'from-emerald-600 to-emerald-700',
   },
   backtester: {
-    accent: '#64748b', // slate-600
-    accentLight: '#94a3b8', // slate-400
-    accentMuted: '#f8fafc', // slate-50
-    gradient: 'from-slate-600 to-slate-700',
+    accent: '#f97316', // orange-600
+    accentLight: '#fb923c', // orange-400
+    accentMuted: '#fff7ed', // orange-50
+    gradient: 'from-orange-600 to-orange-700',
   },
   phenomena: {
     accent: '#a855f7', // purple-600

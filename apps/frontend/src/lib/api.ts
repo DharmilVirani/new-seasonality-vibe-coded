@@ -4,12 +4,6 @@ import axios, { AxiosError, AxiosInstance } from 'axios';
 const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const API_BASE_URL = baseUrl.startsWith('http') ? `${baseUrl}/api` : '/api';
 
-console.log('API Configuration:', {
-  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-  baseUrl,
-  API_BASE_URL
-});
-
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -22,14 +16,6 @@ const api: AxiosInstance = axios.create({
 // Request interceptor - add auth token
 api.interceptors.request.use(
   (config) => {
-    console.log('Making API request:', {
-      method: config.method?.toUpperCase(),
-      url: config.url,
-      baseURL: config.baseURL,
-      fullURL: `${config.baseURL}${config.url}`,
-      timeout: config.timeout
-    });
-
     const token = typeof window !== 'undefined'
       ? localStorage.getItem('accessToken')
       : null;
@@ -39,30 +25,14 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor - handle errors
 api.interceptors.response.use(
-  (response) => {
-    console.log('API response received:', {
-      status: response.status,
-      url: response.config.url,
-      data: response.data
-    });
-    return response;
-  },
+  (response) => response,
   async (error: AxiosError) => {
-    console.error('API response error:', {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-      url: error.config?.url,
-      code: error.code
-    });
-
     if (error.response?.status === 401) {
       // Don't auto-redirect for /auth/me - let checkAuth handle it
       const isAuthMeRequest = error.config?.url?.includes('/auth/me');
@@ -79,16 +49,10 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  login: (email: string, password: string) => {
-    console.log('authApi.login called with:', { email, password: '***' });
-    console.log('Making request to:', `${API_BASE_URL}/auth/login`);
-    return api.post('/auth/login', { email, password }, { timeout: 15000 });
-  },
-  register: (data: { email: string; password: string; name: string }) => {
-    console.log('authApi.register called with:', { ...data, password: '***' });
-    console.log('Making request to:', `${API_BASE_URL}/auth/register`);
-    return api.post('/auth/register', data, { timeout: 15000 });
-  },
+  login: (email: string, password: string) =>
+    api.post('/auth/login', { email, password }, { timeout: 15000 }),
+  register: (data: { email: string; password: string; name: string }) =>
+    api.post('/auth/register', data, { timeout: 15000 }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   refreshToken: (refreshToken: string) =>
@@ -127,11 +91,20 @@ export const analysisApi = {
   // Backtester
   backtest: (params: BacktestParams) => api.post('/analysis/backtest', params),
 
+  // Phenomena Backtester
+  backtestPhenomena: (params: BacktestPhenomenaParams) => api.post('/analysis/backtest/phenomena', params),
+
   // Phenomena
   phenomena: (params: PhenomenaParams) => api.post('/analysis/phenomena', params),
 
   // Basket
-  basket: (params: BasketParams) => api.post('/analysis/basket', params),
+  getBasketGroups: () => api.get('/analysis/basket/groups'),
+  createBasketGroup: (params: BasketGroupCreateParams) => api.post('/analysis/basket/groups', params),
+  updateBasketGroup: (id: number, params: BasketGroupUpdateParams) => api.patch(`/analysis/basket/groups/${id}`, params),
+  deleteBasketGroup: (id: number) => api.delete(`/analysis/basket/groups/${id}`),
+  basketCalendarDay: (params: BasketCalendarParams) => api.post('/analysis/basket/calendar-day', params),
+  basketTradingDay: (params: BasketTradingParams) => api.post('/analysis/basket/trading-day', params),
+  basketBestMonthlyReturns: (params: BasketBestMonthlyParams) => api.post('/analysis/basket/best-monthly-returns', params),
 
   // Chart Data
   chart: (params: ChartParams) => api.post('/analysis/chart', params),
@@ -279,6 +252,8 @@ export interface ScannerParams {
   trendType?: string;
   consecutiveDays?: number;
   criteria?: Record<string, unknown>;
+  responseMode?: 'full' | 'summary';
+  maxRows?: number;
 }
 
 export interface BacktestParams {
@@ -306,11 +281,72 @@ export interface BasketParams {
   weights?: Record<string, number>;
 }
 
+export interface BasketCalendarParams {
+  basketGroupId?: number;
+  basketGroup?: string;
+  startDate: string;
+  endDate: string;
+  month: 'Jan' | 'Feb' | 'Mar' | 'Apr' | 'May' | 'Jun' | 'Jul' | 'Aug' | 'Sep' | 'Oct' | 'Nov' | 'Dec';
+  calendarDay: number;
+  holdingPeriod: number;
+  trendType: 'Any' | 'Bullish' | 'Bearish';
+  riskFreeInterestRate: number;
+  topRanks: number;
+  sortFirstBy: 'AvgPnl' | 'WinnerPct';
+}
+
+export interface BasketTradingParams {
+  basketGroupId?: number;
+  basketGroup?: string;
+  startDate: string;
+  endDate: string;
+  month: 'Jan' | 'Feb' | 'Mar' | 'Apr' | 'May' | 'Jun' | 'Jul' | 'Aug' | 'Sep' | 'Oct' | 'Nov' | 'Dec';
+  tradingDay: number;
+  holdingPeriod: number;
+  trendType: 'Any' | 'Bullish' | 'Bearish';
+  riskFreeInterestRate: number;
+  topRanks: number;
+  sortFirstBy: 'AvgPnl' | 'WinnerPct';
+}
+
+export interface BasketBestMonthlyParams {
+  basketGroupId?: number;
+  basketGroup?: string;
+  startDate: string;
+  endDate: string;
+  monthName: 'JAN' | 'FEB' | 'MAR' | 'APR' | 'MAY' | 'JUN' | 'JUL' | 'AUG' | 'SEP' | 'OCT' | 'NOV' | 'DEC';
+  rankType: 'Bullish' | 'Bearish';
+  intervalGapRange: number;
+  totalReturns: number;
+}
+
 export interface ChartParams {
   symbol: string;
   startDate: string;
   endDate: string;
   chartType?: string;
+}
+
+export interface BasketGroupDto {
+  id: number;
+  name: string;
+  description?: string | null;
+  symbolCount: number;
+  symbols: string[];
+  isSystem: boolean;
+  isOwner: boolean;
+}
+
+export interface BasketGroupCreateParams {
+  name: string;
+  description?: string | null;
+  symbols: string[];
+}
+
+export interface BasketGroupUpdateParams {
+  name?: string;
+  description?: string | null;
+  symbols?: string[];
 }
 
 export interface FilterConfig {
@@ -382,4 +418,34 @@ export interface EventCompareParams {
   eventNames: string[];
   startDate: string;
   endDate: string;
+}
+
+export interface BacktestPhenomenaParams {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  evenOddYears?: 'All' | 'Even' | 'Odd' | 'Leap';
+  specificMonth?: number | null;
+  specificExpiryWeek?: number | null;
+  specificMondayWeek?: number | null;
+  initialCapital?: number;
+  riskFreeRate?: number;
+  tradeType?: 'longTrades' | 'shortTrades';
+  brokerage?: number;
+  phenomenaDaysStart?: number;
+  phenomenaDaysEnd?: number;
+  queryWeekdays?: string[];
+  queryTradingDays?: number[];
+  queryCalendarDays?: number[];
+  heatmapType?: 'TradingMonthDaysVsWeekdays' | 'CalenderMonthDaysVsWeekdays';
+  showAnnotation?: boolean;
+  inSampleStart?: string;
+  inSampleEnd?: string;
+  outSampleStart?: string;
+  outSampleEnd?: string;
+  walkForwardType?: string;
+  walkForwardSymbols?: string[];
+  includeTradeList?: boolean;
+  maxRows?: number;
+  responseMode?: 'full' | 'summary' | 'chartOnly';
 }

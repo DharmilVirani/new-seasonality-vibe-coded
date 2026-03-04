@@ -18,7 +18,7 @@
 ### Features:
 - **Bottom Button**: "Clear Filters" button in the footer of filter panels
 - **Header Icon**: Quick clear icon (🔄) in the filter panel header
-- **Functionality**: Resets all filters to default values while keeping selected symbol and date range
+- **Funct/ionality**: Resets all filters to default values while keeping selected symbol and date range
 
 ## 2. Analytics Matrix Tooltips ✅
 

@@ -33,6 +33,14 @@ import {
 } from '@/components/filters';
 import { RightFilterConsole, FilterSection } from '@/components/layout/RightFilterConsole';
 import { MetricTooltip, METRIC_DEFINITIONS } from '@/components/ui/MetricTooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { SlidersHorizontal } from 'lucide-react';
 
 const Loading = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
   <div className="flex items-center justify-center">
@@ -226,7 +234,8 @@ function downloadTableData(
 export default function DailyPage() {
   const { selectedSymbols, startDate, endDate, lastNDays, filters, chartScale, resetFilters } = useAnalysisStore();
   const { timeRangeSelection, dayRangeSelection } = useChartSelectionStore();
-  const [filterOpen, setFilterOpen] = useState(true);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   // Chart mode toggle
   const [chartMode, setChartMode] = useState<'superimposed' | 'aggregate'>('superimposed');
@@ -710,19 +719,86 @@ export default function DailyPage() {
                   : undefined}
                 compareLabel={compareSymbol}
               />
-              <StatCard
-                label="MAX DD"
-                value={`${Math.abs((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0).toFixed(2)}%`}
-                trend={((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0) > -10 ? 'up' : 'down'}
-                subValue={`StdDev: ${((dayRangeSelection.isActive ? filteredStats : stats)?.stdDev || 0).toFixed(2)}`}
-                metricKey="maxDrawdown"
-                compareValue={compareMode && compareSymbolData?.statistics ?
-                  `${(((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0) - (compareSymbolData.statistics.maxDrawdown || 0)) > 0 ? '+' : ''}${(Math.abs((dayRangeSelection.isActive ? filteredStats : stats)?.maxDrawdown || 0) - Math.abs(compareSymbolData.statistics.maxDrawdown || 0)).toFixed(2)}%`
-                  : undefined}
-                compareLabel={compareSymbol}
-              />
             </div>
           )}
+
+          {/* Compact Filter Row */}
+          <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+            {/* Symbol */}
+            <div className="min-w-[120px]">
+              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Symbol</label>
+              <select
+                value={selectedSymbols[0] || ''}
+                onChange={(e) => useAnalysisStore.getState().setSelectedSymbols(e.target.value ? [e.target.value] : [])}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-teal-400 bg-white"
+              >
+                <option value="">Select Symbol</option>
+                {symbolsData?.map((s: { symbol: string }) => (
+                  <option key={s.symbol} value={s.symbol}>{s.symbol}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Range */}
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Start</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => useAnalysisStore.getState().setDateRange(e.target.value, useAnalysisStore.getState().endDate)}
+                  className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-teal-400"
+                />
+              </div>
+              <span className="text-slate-400 pb-1.5">→</span>
+              <div>
+                <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">End</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => useAnalysisStore.getState().setDateRange(useAnalysisStore.getState().startDate, e.target.value)}
+                  className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-teal-400"
+                />
+              </div>
+            </div>
+
+            {/* Last N Days */}
+            <div className="min-w-[100px]">
+              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Last N Days</label>
+              <input
+                type="number"
+                value={lastNDays}
+                onChange={(e) => useAnalysisStore.getState().setLastNDays(parseInt(e.target.value) || 0)}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-teal-400"
+              />
+            </div>
+
+            {/* Compare Mode Toggle */}
+            <div className="flex items-center gap-2 pt-4">
+              <input
+                type="checkbox"
+                id="compareModeCompact"
+                checked={compareMode}
+                onChange={(e) => {
+                  setCompareMode(e.target.checked);
+                  if (!e.target.checked) setCompareSymbol('');
+                }}
+                className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <label htmlFor="compareModeCompact" className="text-xs text-slate-600">Compare</label>
+            </div>
+
+            {/* Filter Button */}
+            <Button
+              onClick={() => setFilterModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-2 border-slate-300 hover:border-teal-400 hover:bg-teal-50 ml-auto"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+            </Button>
+          </div>
 
           {/* PATTERN ALERTS */}
           {patternAlerts.length > 0 && (
@@ -979,22 +1055,25 @@ export default function DailyPage() {
         </div>
       </div>
 
-      {/* Right Filter Console */}
-      <RightFilterConsole
-        isOpen={filterOpen}
-        onToggle={() => setFilterOpen(!filterOpen)}
-        onApply={() => refetch()}
-        onClear={resetFilters}
-        isLoading={isFetching}
-        title="Filters"
-        subtitle="Configure Analysis"
-        primaryColor={TAB_COLOR.accent}
-      >
-        <FilterSection title="Symbol" defaultOpen delay={0}>
-          <div className="pt-1">
-            <SymbolSelector />
-          </div>
-        </FilterSection>
+      {/* Filter Modal */}
+      <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SlidersHorizontal className="h-5 w-5 text-teal-600" />
+              Filters
+            </DialogTitle>
+            <DialogDescription>
+              Configure analysis options
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+            <FilterSection title="Symbol" defaultOpen delay={0}>
+              <div className="pt-1">
+                <SymbolSelector />
+              </div>
+            </FilterSection>
 
         <FilterSection title="Compare" defaultOpen delay={0.02}>
           <div className="space-y-3 pt-1">
@@ -1090,7 +1169,39 @@ export default function DailyPage() {
         <FilterSection title="Chart Type" delay={0.15}>
           <SuperimposedChartFilter />
         </FilterSection>
-      </RightFilterConsole>
+          </div>
+          
+          <div className="flex items-center gap-3 pt-4 border-t">
+            <Button
+              onClick={resetFilters}
+              variant="outline"
+              className="flex-1"
+            >
+              Clear All
+            </Button>
+            <Button
+              onClick={() => {
+                refetch();
+                setFilterModalOpen(false);
+              }}
+              disabled={isFetching}
+              className="flex-1 bg-teal-600 hover:bg-teal-700"
+            >
+              {isFetching ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Apply Filters
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

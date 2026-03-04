@@ -413,15 +413,15 @@ export default function MonthlyPage() {
     }).filter(Boolean) as Array<{ month: number; monthName: string; avgReturn: number; winRate: number; totalCount: number; wins: number }>;
 
     // Find best month (highest avg return)
-    const bestMonth = monthStats.reduce((best, current) => 
+    const bestMonth = monthStats.reduce((best, current) =>
       current.avgReturn > best.avgReturn ? current : best, monthStats[0]);
-    
+
     // Find worst month (lowest avg return)
-    const worstMonth = monthStats.reduce((worst, current) => 
+    const worstMonth = monthStats.reduce((worst, current) =>
       current.avgReturn < worst.avgReturn ? current : worst, monthStats[0]);
 
     // Find consistent month (highest win rate)
-    const consistentMonth = monthStats.reduce((best, current) => 
+    const consistentMonth = monthStats.reduce((best, current) =>
       current.winRate > best.winRate ? current : best, monthStats[0]);
 
     return { bestMonth, worstMonth, consistentMonth, allMonths: monthStats };
@@ -436,7 +436,7 @@ export default function MonthlyPage() {
       'July': 6, 'August': 7, 'September': 8, 'October': 9, 'November': 10, 'December': 11
     };
     const targetMonth = monthNameToIndex[historicallyTrendingMonth];
-    
+
     const isBullish = historicallyTrendingTrend === 'Bullish';
 
     // Group by year
@@ -510,10 +510,10 @@ export default function MonthlyPage() {
     if (!symbolData?.chartData) return [];
 
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+
     // Group by year first
     const yearGroups: Record<number, Record<number, number[]>> = {};
-    
+
     symbolData.chartData.forEach((d: any) => {
       const date = new Date(d.date);
       const year = date.getFullYear();

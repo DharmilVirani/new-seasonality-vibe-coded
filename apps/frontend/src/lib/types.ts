@@ -139,6 +139,8 @@ export interface ScannerParams {
   trendType: 'Bullish' | 'Bearish';
   consecutiveDays: number;
   criteria: ScannerCriteria;
+  responseMode?: 'full' | 'summary';
+  maxRows?: number;
 }
 
 export interface ScannerCriteria {
@@ -165,6 +167,37 @@ export interface BacktestParams {
   takeProfit?: number;
 }
 
+// Phenomena Backtest Types
+export interface BacktestPhenomenaParams {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  evenOddYears?: 'All' | 'Even' | 'Odd' | 'Leap';
+  specificMonth?: number | null;
+  specificExpiryWeek?: number | null;
+  specificMondayWeek?: number | null;
+  initialCapital?: number;
+  riskFreeRate?: number;
+  tradeType?: 'longTrades' | 'shortTrades';
+  brokerage?: number;
+  phenomenaDaysStart?: number;
+  phenomenaDaysEnd?: number;
+  queryWeekdays?: string[];
+  queryTradingDays?: number[];
+  queryCalendarDays?: number[];
+  heatmapType?: 'TradingMonthDaysVsWeekdays' | 'CalenderMonthDaysVsWeekdays';
+  showAnnotation?: boolean;
+  inSampleStart?: string;
+  inSampleEnd?: string;
+  outSampleStart?: string;
+  outSampleEnd?: string;
+  walkForwardType?: string;
+  walkForwardSymbols?: string[];
+  includeTradeList?: boolean;
+  maxRows?: number;
+  responseMode?: 'full' | 'summary' | 'chartOnly';
+}
+
 // Phenomena Types
 export interface PhenomenaParams {
   symbol: string;
@@ -181,6 +214,67 @@ export interface BasketParams {
   startDate: string;
   endDate: string;
   weights?: Record<string, number>;
+}
+
+export interface BasketGroup {
+  id: number;
+  name: string;
+  description?: string | null;
+  symbolCount: number;
+  symbols: string[];
+  isSystem: boolean;
+  isOwner: boolean;
+}
+
+export interface BasketCalendarParams {
+  basketGroupId?: number;
+  basketGroup?: string;
+  startDate: string;
+  endDate: string;
+  month: 'Jan' | 'Feb' | 'Mar' | 'Apr' | 'May' | 'Jun' | 'Jul' | 'Aug' | 'Sep' | 'Oct' | 'Nov' | 'Dec';
+  calendarDay: number;
+  holdingPeriod: number;
+  trendType: 'Any' | 'Bullish' | 'Bearish';
+  riskFreeInterestRate: number;
+  topRanks: number;
+  sortFirstBy: 'AvgPnl' | 'WinnerPct';
+}
+
+export interface BasketTradingParams {
+  basketGroupId?: number;
+  basketGroup?: string;
+  startDate: string;
+  endDate: string;
+  month: 'Jan' | 'Feb' | 'Mar' | 'Apr' | 'May' | 'Jun' | 'Jul' | 'Aug' | 'Sep' | 'Oct' | 'Nov' | 'Dec';
+  tradingDay: number;
+  holdingPeriod: number;
+  trendType: 'Any' | 'Bullish' | 'Bearish';
+  riskFreeInterestRate: number;
+  topRanks: number;
+  sortFirstBy: 'AvgPnl' | 'WinnerPct';
+}
+
+export interface BasketBestMonthlyParams {
+  basketGroupId?: number;
+  basketGroup?: string;
+  startDate: string;
+  endDate: string;
+  monthName: 'JAN' | 'FEB' | 'MAR' | 'APR' | 'MAY' | 'JUN' | 'JUL' | 'AUG' | 'SEP' | 'OCT' | 'NOV' | 'DEC';
+  rankType: 'Bullish' | 'Bearish';
+  intervalGapRange: number;
+  totalReturns: number;
+}
+
+export interface BasketGroupCreateParams {
+  name: string;
+  description?: string | null;
+  symbols: string[];
+}
+
+export interface BasketGroupUpdateParams {
+  name?: string;
+  description?: string | null;
+  symbols?: string[];
 }
 
 // Chart Types

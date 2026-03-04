@@ -3,27 +3,16 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Play, Filter,
-  ChevronDown, ChevronRight, ChevronLeft,
+  ChevronDown, ChevronRight, ChevronLeft, ChevronUp,
   RefreshCw, Download,
-  Search, Settings2,
+  Search,
   Table2, Flame, Network,
   SlidersHorizontal
 } from 'lucide-react';
 import { analysisApi } from '@/lib/api';
-import { cn, formatPercentage, formatNumber, TAB_COLORS } from '@/lib/utils';
+import { cn, formatPercentage } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { FilterSection } from '@/components/layout/RightFilterConsole';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-
-const TAB_COLOR = TAB_COLORS.scanner;
 
 interface YearOccurrence {
   year: number;
@@ -75,22 +64,22 @@ function formatDayToDate(day: number, month: number = 1, year: number = 2024): s
   const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   let adjustedDay = day;
   let adjustedMonth = month;
-  
+
   if (day > daysInMonth[month - 1]) {
     adjustedDay = daysInMonth[month - 1];
   }
-  
+
   const dd = String(adjustedDay).padStart(2, '0');
   const mm = MONTHS[adjustedMonth - 1];
   const yyyy = String(year);
-  
+
   return `${dd}/${mm}/${yyyy}`;
 }
 
 function getDateRange(
-  startDay: number, 
-  endDay: number, 
-  startYear: number, 
+  startDay: number,
+  endDay: number,
+  startYear: number,
   endYear: number,
   selectedMonths: number[] = []
 ): { startDate: string; endDate: string } {
@@ -102,65 +91,18 @@ function getDateRange(
       endDate: `Day ${endDay} ${yearRange}`,
     };
   }
-  
+
   // If months selected, use first month and show dates
   const month = selectedMonths[0];
-  
+
   return {
     startDate: formatDayToDate(startDay, month, startYear),
     endDate: formatDayToDate(endDay, month, endYear),
   };
 }
 
-function InfoTooltip({ content }: { content: string }) {
-  const [isVisible, setIsVisible] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const buttonRef = React.useRef<HTMLButtonElement>(null);
-
-  const handleMouseEnter = () => {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPosition({
-        x: rect.left + rect.width / 2,
-        y: rect.top
-      });
-    }
-    setIsVisible(true);
-  };
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={buttonRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => setIsVisible(false)}
-        className="ml-1.5 inline-flex items-center justify-center"
-        type="button"
-      >
-        <Settings2 className="h-3.5 w-3.5 text-slate-400 hover:text-emerald-600 transition-colors" />
-      </button>
-      {isVisible && (
-        <div
-          className="fixed z-[9999] w-64 px-3 py-2 bg-slate-900 text-white text-xs rounded-lg shadow-xl pointer-events-none"
-          style={{
-            left: `${position.x}px`,
-            top: `${position.y - 10}px`,
-            transform: 'translate(-50%, -100%)'
-          }}
-        >
-          <div className="relative">
-            {content}
-            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-slate-900" />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ScannerPage() {
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'heatmap' | 'cross'>('table');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
@@ -196,6 +138,7 @@ export default function ScannerPage() {
 
   // Year occurrences filter toggle - default to positive only (more useful for traders)
   const [showPositiveOnly, setShowPositiveOnly] = useState(true);
+  const [appliedScannerFiltersSignature, setAppliedScannerFiltersSignature] = useState<string | null>(null);
 
   // Toggle expand/collapse for a symbol (auto-collapses others)
   const toggleSymbolExpand = (symbol: string) => {
@@ -238,31 +181,6 @@ export default function ScannerPage() {
       specificExpiryWeeks, specificMondayWeeks, trendType, consecutiveDays,
       minAccuracy, minTotalPnl, minSampleSize, minAvgPnl, op12, op23, op34],
     queryFn: async () => {
-      console.log('Scanner request:', {
-        symbols: selectedSymbols.length > 0 ? selectedSymbols : undefined,
-        startDate,
-        endDate,
-        filters: {
-          evenOddYears,
-          specificMonths,
-          specificExpiryWeeksMonthly: specificExpiryWeeks,
-          specificMondayWeeksMonthly: specificMondayWeeks,
-        },
-        trendType,
-        consecutiveDays,
-        criteria: {
-          minAccuracy,
-          minTotalPnl,
-          minSampleSize,
-          minAvgPnl,
-          operations: {
-            op12,
-            op23,
-            op34,
-          },
-        },
-      });
-
       const response = await analysisApi.scanner({
         symbols: selectedSymbols.length > 0 ? selectedSymbols : undefined,
         startDate,
@@ -287,14 +205,54 @@ export default function ScannerPage() {
           },
         },
       });
-      console.log('Scanner response:', response.data);
       return response.data.data as ScannerResponse;
     },
-    enabled: true, // Run on mount
+    enabled: false,
     retry: 1,
   });
 
   const scannerData = data;
+  const currentScannerFiltersSignature = useMemo(
+    () =>
+      JSON.stringify({
+        selectedSymbols,
+        startDate,
+        endDate,
+        evenOddYears,
+        specificMonths,
+        specificExpiryWeeks,
+        specificMondayWeeks,
+        trendType,
+        consecutiveDays,
+        minAccuracy,
+        minTotalPnl,
+        minSampleSize,
+        minAvgPnl,
+        op12,
+        op23,
+        op34,
+      }),
+    [
+      selectedSymbols,
+      startDate,
+      endDate,
+      evenOddYears,
+      specificMonths,
+      specificExpiryWeeks,
+      specificMondayWeeks,
+      trendType,
+      consecutiveDays,
+      minAccuracy,
+      minTotalPnl,
+      minSampleSize,
+      minAvgPnl,
+      op12,
+      op23,
+      op34,
+    ]
+  );
+  const hasScanned = appliedScannerFiltersSignature !== null;
+  const isScannerDirty = hasScanned && appliedScannerFiltersSignature !== currentScannerFiltersSignature;
 
   // Flatten all matches for pagination
   const allMatches = useMemo(() => {
@@ -312,14 +270,14 @@ export default function ScannerPage() {
   // Aggregated data by symbol
   const aggregatedData = useMemo(() => {
     if (!scannerData?.results) return [];
-    
+
     return scannerData.results.map(result => {
       const matches = result.matches;
       const totalSampleSize = matches.reduce((sum, m) => sum + (m.sampleSize || 0), 0);
       const avgAccuracy = matches.reduce((sum, m) => sum + (m.accuracy || 0), 0) / matches.length;
       const avgPnl = matches.reduce((sum, m) => sum + (m.avgPnl || 0), 0) / matches.length;
       const totalPnl = matches.reduce((sum, m) => sum + (m.totalPnl || 0), 0);
-      
+
       // Get first and last date range
       const firstMatchDate = matches[0]?.startDate || `Day ${matches[0]?.startDay}`;
       const lastMatchDate = matches[matches.length - 1]?.endDate || `Day ${matches[matches.length - 1]?.endDay}`;
@@ -327,7 +285,7 @@ export default function ScannerPage() {
       const firstEndDate = matches[0]?.endDate || '';
       const lastStartDate = matches[matches.length - 1]?.startDate || '';
       const lastEndDate = matches[matches.length - 1]?.endDate || '';
-      
+
       // Format date range for display
       let dateRangeStr = '';
       if (firstStartDate && firstEndDate && lastStartDate && lastEndDate) {
@@ -337,7 +295,7 @@ export default function ScannerPage() {
         // No dates - show Day format
         dateRangeStr = `Day ${matches[0]?.startDay} - Day ${matches[0]?.endDay} TO Day ${matches[matches.length - 1]?.startDay} - Day ${matches[matches.length - 1]?.endDay}`;
       }
-      
+
       return {
         symbol: result.symbol,
         name: result.name,
@@ -462,8 +420,12 @@ export default function ScannerPage() {
     return bySymbol;
   }, [heatmapData]);
 
-  const handleScan = () => {
-    refetch();
+  const handleScan = async () => {
+    setAdvancedFiltersOpen(false);
+    const response = await refetch();
+    if (!response.error) {
+      setAppliedScannerFiltersSignature(currentScannerFiltersSignature);
+    }
   };
 
   const handleClearFilters = () => {
@@ -541,16 +503,6 @@ export default function ScannerPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button
-              onClick={handleScan}
-              disabled={isFetching}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-            >
-              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-              Scan
-            </Button>
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-sm">
               SC
             </div>
@@ -591,11 +543,11 @@ export default function ScannerPage() {
           <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
             {/* Symbol Select */}
             <div className="min-w-[140px]">
-              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Symbol</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1">Symbol</label>
               <select
                 value={selectedSymbols.length === 1 ? selectedSymbols[0] : ''}
                 onChange={(e) => setSelectedSymbols(e.target.value ? [e.target.value] : [])}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 bg-white"
+                className="w-full px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400 bg-white"
               >
                 <option value="">All Symbols</option>
                 {availableSymbols.map((s: { symbol: string }) => (
@@ -607,33 +559,33 @@ export default function ScannerPage() {
             {/* Date Range */}
             <div className="flex items-end gap-2">
               <div>
-                <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Start</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1">Start</label>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400"
+                  className="px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400"
                 />
               </div>
               <span className="text-slate-400 pb-1.5">→</span>
               <div>
-                <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">End</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1">End</label>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400"
+                  className="px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400"
                 />
               </div>
             </div>
 
             {/* Year Type */}
             <div className="min-w-[100px]">
-              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Year Type</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1">Year Type</label>
               <select
                 value={evenOddYears}
                 onChange={(e) => setEvenOddYears(e.target.value as any)}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 bg-white"
+                className="w-full px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400 bg-white"
               >
                 <option value="All">All Years</option>
                 <option value="Even">Even</option>
@@ -644,11 +596,11 @@ export default function ScannerPage() {
 
             {/* Month */}
             <div className="min-w-[120px]">
-              <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Month</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1">Month</label>
               <select
                 value={specificMonths.join(',')}
                 onChange={(e) => setSpecificMonths(e.target.value ? e.target.value.split(',').map(Number) : [])}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 bg-white"
+                className="w-full px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400 bg-white"
               >
                 <option value="">All Months</option>
                 <option value="1">January</option>
@@ -668,20 +620,265 @@ export default function ScannerPage() {
 
             {/* Filter Button */}
             <Button
-              onClick={() => setFilterModalOpen(true)}
+              onClick={() => setAdvancedFiltersOpen((open) => !open)}
               variant="outline"
               size="sm"
               className="gap-2 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 ml-auto"
             >
               <SlidersHorizontal className="h-4 w-4" />
-              Filters
+              {advancedFiltersOpen ? 'Hide Filters' : 'Filters'}
+              {advancedFiltersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </Button>
           </div>
+
+          <div className="flex items-center justify-between gap-3 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Search className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Run Scanner</p>
+                <p className="text-xs text-slate-500">Apply current filters and find matching symbols</p>
+              </div>
+              {isScannerDirty && (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  Filters changed
+                </span>
+              )}
+            </div>
+            <Button
+              onClick={handleScan}
+              disabled={isFetching}
+              className="h-11 px-7 text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <RefreshCw className={cn("h-5 w-5 mr-2", isFetching && "animate-spin")} />
+              {isFetching ? 'Scanning...' : 'Run Scanner'}
+            </Button>
+          </div>
+
+          {advancedFiltersOpen && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">Advanced Scanner Filters</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-slate-500 hover:text-slate-700"
+                  onClick={() => setAdvancedFiltersOpen(false)}
+                >
+                  Collapse
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">Symbol Universe</div>
+                  <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-md p-2 bg-white space-y-1">
+                    {availableSymbols.map((symbol: { symbol: string; name: string }) => (
+                      <label key={symbol.symbol} className="flex items-center gap-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedSymbols.includes(symbol.symbol)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedSymbols([...selectedSymbols, symbol.symbol]);
+                            else setSelectedSymbols(selectedSymbols.filter(s => s !== symbol.symbol));
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-sm text-slate-700">{symbol.symbol}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {selectedSymbols.length > 0 && (
+                    <button
+                      onClick={() => setSelectedSymbols([])}
+                      className="text-xs text-emerald-600 hover:underline"
+                    >
+                      Clear symbol selection
+                    </button>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">Month & Week</div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Specific Months</label>
+                    <MultiSelect
+                      options={[
+                        { value: 1, label: 'January' },
+                        { value: 2, label: 'February' },
+                        { value: 3, label: 'March' },
+                        { value: 4, label: 'April' },
+                        { value: 5, label: 'May' },
+                        { value: 6, label: 'June' },
+                        { value: 7, label: 'July' },
+                        { value: 8, label: 'August' },
+                        { value: 9, label: 'September' },
+                        { value: 10, label: 'October' },
+                        { value: 11, label: 'November' },
+                        { value: 12, label: 'December' },
+                      ]}
+                      selected={specificMonths}
+                      onChange={setSpecificMonths}
+                      placeholder="All Months"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Expiry Week</label>
+                    <MultiSelect
+                      options={[
+                        { value: 1, label: '1st Week' },
+                        { value: 2, label: '2nd Week' },
+                        { value: 3, label: '3rd Week' },
+                        { value: 4, label: '4th Week' },
+                        { value: 5, label: '5th Week' },
+                      ]}
+                      selected={specificExpiryWeeks}
+                      onChange={setSpecificExpiryWeeks}
+                      placeholder="All Weeks"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Monday Week</label>
+                    <MultiSelect
+                      options={[
+                        { value: 1, label: '1st Week' },
+                        { value: 2, label: '2nd Week' },
+                        { value: 3, label: '3rd Week' },
+                        { value: 4, label: '4th Week' },
+                        { value: 5, label: '5th Week' },
+                      ]}
+                      selected={specificMondayWeeks}
+                      onChange={setSpecificMondayWeeks}
+                      placeholder="All Weeks"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">Trend</div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Trend Type</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setTrendType('Bullish')}
+                        className={cn(
+                          "flex-1 py-2 text-sm font-medium rounded-md border transition-colors",
+                          trendType === 'Bullish'
+                            ? "bg-emerald-600 text-white border-emerald-600"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300"
+                        )}
+                      >
+                        Bullish
+                      </button>
+                      <button
+                        onClick={() => setTrendType('Bearish')}
+                        className={cn(
+                          "flex-1 py-2 text-sm font-medium rounded-md border transition-colors",
+                          trendType === 'Bearish'
+                            ? "bg-red-600 text-white border-red-600"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-red-300"
+                        )}
+                      >
+                        Bearish
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Consecutive Days</label>
+                      <span className="text-xs font-bold text-slate-500">{consecutiveDays}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={2}
+                      max={10}
+                      step={1}
+                      value={consecutiveDays}
+                      onChange={(e) => setConsecutiveDays(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">Criteria + Query</div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">A Min Accuracy</label>
+                      <span className="text-xs font-bold text-emerald-600">{minAccuracy}%</span>
+                    </div>
+                    <input type="range" min={0} max={100} step={5} value={minAccuracy} onChange={(e) => setMinAccuracy(parseInt(e.target.value))} className="w-full" />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">B Min Total PnL</label>
+                      <span className="text-xs font-bold text-emerald-600">{minTotalPnl}%</span>
+                    </div>
+                    <input type="range" min={0} max={10} step={0.1} value={minTotalPnl} onChange={(e) => setMinTotalPnl(parseFloat(e.target.value))} className="w-full" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase mb-1 block">C Min Sample</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={10}
+                        value={minSampleSize}
+                        onChange={(e) => setMinSampleSize(parseInt(e.target.value) || 0)}
+                        className="w-full px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase mb-1 block">D Min Avg PnL</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={minAvgPnl}
+                        onChange={(e) => setMinAvgPnl(parseFloat(e.target.value) || 0)}
+                        className="w-full px-2.5 py-2 border border-slate-200 rounded-md text-sm outline-none focus:border-emerald-400 bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs text-slate-600">A</span>
+                    <select value={op12} onChange={(e) => setOp12(e.target.value as any)} className="px-2 py-1.5 border border-slate-200 rounded text-xs bg-white">
+                      <option value="OR">OR</option><option value="AND">AND</option>
+                    </select>
+                    <span className="text-xs text-slate-600">B</span>
+                    <select value={op23} onChange={(e) => setOp23(e.target.value as any)} className="px-2 py-1.5 border border-slate-200 rounded text-xs bg-white">
+                      <option value="OR">OR</option><option value="AND">AND</option>
+                    </select>
+                    <span className="text-xs text-slate-600">C</span>
+                    <select value={op34} onChange={(e) => setOp34(e.target.value as any)} className="px-2 py-1.5 border border-slate-200 rounded text-xs bg-white">
+                      <option value="OR">OR</option><option value="AND">AND</option>
+                    </select>
+                    <span className="text-xs text-slate-600">D</span>
+                  </div>
+                  <div className="flex items-center justify-end pt-1">
+                    <Button
+                      onClick={handleClearFilters}
+                      variant="outline"
+                      size="sm"
+                      className="h-8 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50"
+                    >
+                      Clear Advanced
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Loading State */}
           {isLoading || isFetching ? (
             <div className="flex justify-center py-20">
               <Loading size="lg" />
+            </div>
+          ) : !hasScanned ? (
+            <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
+              <p className="text-slate-500">Configure filters and click Scan.</p>
             </div>
           ) : scannerData && scannerData.results && scannerData.results.length > 0 ? (
             <div className="space-y-4">
@@ -806,13 +1003,13 @@ export default function ScannerPage() {
                                   {formatPercentage(aggRow.totalPnl ?? 0)}
                                 </td>
                               </tr>
-                              
+
                               {/* Level 2: Match List (when symbol is expanded) */}
                               {isSymbolExpanded && aggRow.matches.map((match, mIdx) => {
                                 const isMatchExpanded = expandedMatchIndex === mIdx;
                                 const allYearOccurrences = match.yearOccurrences || [];
                                 // Filter based on toggle
-                                const filteredYearOccurrences = showPositiveOnly 
+                                const filteredYearOccurrences = showPositiveOnly
                                   ? allYearOccurrences.filter(y => y.positive)
                                   : allYearOccurrences;
                                 const yearsPerPage = 10;
@@ -821,7 +1018,7 @@ export default function ScannerPage() {
                                   (expandedMatchPage - 1) * yearsPerPage,
                                   expandedMatchPage * yearsPerPage
                                 );
-                                
+
                                 return (
                                   <React.Fragment key={`${idx}-${mIdx}`}>
                                     {/* Match Row */}
@@ -875,36 +1072,36 @@ export default function ScannerPage() {
                                         {formatPercentage(match.totalPnl ?? 0)}
                                       </td>
                                     </tr>
-                                    
+
                                     {/* Level 3: Year Occurrences (when match is expanded) */}
                                     {isMatchExpanded && (
                                       <>
                                         {paginatedYears.map((yearData, yearIdx) => {
                                           const returnValue = yearData.totalReturn ?? 0;
                                           return (
-                                          <tr key={`${idx}-${mIdx}-${yearIdx}`} className="bg-white hover:bg-slate-50">
-                                            <td className="py-1 px-4"></td>
-                                            <td className="py-1 px-2 pl-4 text-slate-400 text-xs">
-                                              {yearData.year}
-                                            </td>
-                                            <td className="py-1 px-2 text-slate-500 text-xs" colSpan={2}>
-                                              {yearData.startDate} - {yearData.endDate}
-                                            </td>
-                                            <td className="py-1 px-2 text-right text-slate-500 text-xs">
-                                              {yearData.positive ? 'Positive' : 'Negative'}
-                                            </td>
-                                            <td className="py-1 px-2"></td>
-                                            <td className={cn(
-                                              "py-1 px-2 text-right font-medium text-xs",
-                                              returnValue >= 0 ? "text-emerald-600" : "text-red-600"
-                                            )}>
-                                              {returnValue > 0 ? '+' : ''}{returnValue.toFixed(2)}%
-                                            </td>
-                                            <td className="py-1 px-2"></td>
-                                          </tr>
+                                            <tr key={`${idx}-${mIdx}-${yearIdx}`} className="bg-white hover:bg-slate-50">
+                                              <td className="py-1 px-4"></td>
+                                              <td className="py-1 px-2 pl-4 text-slate-400 text-xs">
+                                                {yearData.year}
+                                              </td>
+                                              <td className="py-1 px-2 text-slate-500 text-xs" colSpan={2}>
+                                                {yearData.startDate} - {yearData.endDate}
+                                              </td>
+                                              <td className="py-1 px-2 text-right text-slate-500 text-xs">
+                                                {yearData.positive ? 'Positive' : 'Negative'}
+                                              </td>
+                                              <td className="py-1 px-2"></td>
+                                              <td className={cn(
+                                                "py-1 px-2 text-right font-medium text-xs",
+                                                returnValue >= 0 ? "text-emerald-600" : "text-red-600"
+                                              )}>
+                                                {returnValue > 0 ? '+' : ''}{returnValue.toFixed(2)}%
+                                              </td>
+                                              <td className="py-1 px-2"></td>
+                                            </tr>
                                           );
                                         })}
-                                        
+
                                         {/* Pagination for years */}
                                         {totalPages > 1 && (
                                           <tr className="bg-slate-100">
@@ -1109,356 +1306,6 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {/* Filter Modal */}
-      <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <SlidersHorizontal className="h-5 w-5 text-emerald-600" />
-              Scanner Filters
-            </DialogTitle>
-            <DialogDescription>
-              Configure pattern search criteria
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto space-y-6 pr-2">
-            <FilterSection title="Symbol" defaultOpen delay={0}>
-          <div className="space-y-2 pt-1">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
-              Select Symbols (leave empty for all)
-            </label>
-            <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-md p-2 space-y-1">
-              {availableSymbols.map((symbol: { symbol: string; name: string }) => (
-                <label key={symbol.symbol} className="flex items-center gap-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedSymbols.includes(symbol.symbol)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedSymbols([...selectedSymbols, symbol.symbol]);
-                      } else {
-                        setSelectedSymbols(selectedSymbols.filter(s => s !== symbol.symbol));
-                      }
-                    }}
-                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-xs text-slate-700">{symbol.symbol}</span>
-                </label>
-              ))}
-            </div>
-            {selectedSymbols.length > 0 && (
-              <button
-                onClick={() => setSelectedSymbols([])}
-                className="text-[10px] text-emerald-600 hover:underline"
-              >
-                Clear selection
-              </button>
-            )}
-          </div>
-        </FilterSection>
-
-        <FilterSection title="Date Range" defaultOpen delay={0.02}>
-          <div className="space-y-3 pt-1">
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-              />
-            </div>
-          </div>
-        </FilterSection>
-
-        <FilterSection title="Year Filters" delay={0.05}>
-          <div className="space-y-3 pt-1">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Even/Odd Years</label>
-                <InfoTooltip content="Filter by even years, odd years, leap years, or all years" />
-              </div>
-              <select
-                value={evenOddYears}
-                onChange={(e) => setEvenOddYears(e.target.value as any)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 bg-white"
-              >
-                <option value="All">All Years</option>
-                <option value="Even">Even Years Only</option>
-                <option value="Odd">Odd Years Only</option>
-                <option value="Leap">Leap Years Only</option>
-              </select>
-            </div>
-          </div>
-        </FilterSection>
-
-        <FilterSection title="Month & Week Filters" delay={0.1}>
-          <div className="space-y-3 pt-1">
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Specific Months</label>
-              <MultiSelect
-                options={[
-                  { value: 1, label: 'January' },
-                  { value: 2, label: 'February' },
-                  { value: 3, label: 'March' },
-                  { value: 4, label: 'April' },
-                  { value: 5, label: 'May' },
-                  { value: 6, label: 'June' },
-                  { value: 7, label: 'July' },
-                  { value: 8, label: 'August' },
-                  { value: 9, label: 'September' },
-                  { value: 10, label: 'October' },
-                  { value: 11, label: 'November' },
-                  { value: 12, label: 'December' },
-                ]}
-                selected={specificMonths}
-                onChange={setSpecificMonths}
-                placeholder="All Months"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Expiry Week (Monthly)</label>
-              <MultiSelect
-                options={[
-                  { value: 1, label: '1st Week' },
-                  { value: 2, label: '2nd Week' },
-                  { value: 3, label: '3rd Week' },
-                  { value: 4, label: '4th Week' },
-                  { value: 5, label: '5th Week' },
-                ]}
-                selected={specificExpiryWeeks}
-                onChange={setSpecificExpiryWeeks}
-                placeholder="All Weeks"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Monday Week (Monthly)</label>
-              <MultiSelect
-                options={[
-                  { value: 1, label: '1st Week' },
-                  { value: 2, label: '2nd Week' },
-                  { value: 3, label: '3rd Week' },
-                  { value: 4, label: '4th Week' },
-                  { value: 5, label: '5th Week' },
-                ]}
-                selected={specificMondayWeeks}
-                onChange={setSpecificMondayWeeks}
-                placeholder="All Weeks"
-              />
-            </div>
-          </div>
-        </FilterSection>
-
-        <FilterSection title="Trend Settings" defaultOpen delay={0.15}>
-          <div className="space-y-3 pt-1">
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1.5 block tracking-wide">Trend Type</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setTrendType('Bullish')}
-                  className={cn(
-                    "flex-1 py-2 text-xs font-medium rounded-md border transition-colors",
-                    trendType === 'Bullish'
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300"
-                  )}
-                >
-                  Bullish
-                </button>
-                <button
-                  onClick={() => setTrendType('Bearish')}
-                  className={cn(
-                    "flex-1 py-2 text-xs font-medium rounded-md border transition-colors",
-                    trendType === 'Bearish'
-                      ? "bg-red-600 text-white border-red-600"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-red-300"
-                  )}
-                >
-                  Bearish
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Consecutive Days</label>
-                <span className="text-[10px] font-bold text-slate-400">{consecutiveDays} days</span>
-              </div>
-              <input
-                type="range"
-                min={2}
-                max={10}
-                step={1}
-                value={consecutiveDays}
-                onChange={(e) => setConsecutiveDays(parseInt(e.target.value))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-[9px] text-slate-400 mt-1">
-                <span>2</span>
-                <span>10</span>
-              </div>
-            </div>
-          </div>
-        </FilterSection>
-
-        <FilterSection title="Criteria Filters (A/B/C/D)" defaultOpen delay={0.2}>
-          <div className="space-y-3 pt-1">
-            {/* A: Minimum Accuracy */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">A - Min Accuracy (%)</label>
-                <span className="text-[10px] font-bold text-emerald-600">{minAccuracy}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={minAccuracy}
-                onChange={(e) => setMinAccuracy(parseInt(e.target.value))}
-                className="w-full"
-              />
-            </div>
-
-            {/* B: Minimum Total PnL */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">B - Min Total PnL (%)</label>
-                <span className="text-[10px] font-bold text-emerald-600">{minTotalPnl}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={10}
-                step={0.1}
-                value={minTotalPnl}
-                onChange={(e) => setMinTotalPnl(parseFloat(e.target.value))}
-                className="w-full"
-              />
-            </div>
-
-            {/* C: Minimum Sample Size */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">C - Min Sample Size</label>
-                <span className="text-[10px] font-bold text-emerald-600">{minSampleSize}</span>
-              </div>
-              <input
-                type="number"
-                min={0}
-                step={10}
-                value={minSampleSize}
-                onChange={(e) => setMinSampleSize(parseInt(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-xs outline-none focus:border-emerald-400"
-              />
-            </div>
-
-            {/* D: Minimum Average PnL */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">D - Min Avg PnL (%)</label>
-                <span className="text-[10px] font-bold text-emerald-600">{minAvgPnl}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={5}
-                step={0.1}
-                value={minAvgPnl}
-                onChange={(e) => setMinAvgPnl(parseFloat(e.target.value))}
-                className="w-full"
-              />
-            </div>
-          </div>
-        </FilterSection>
-
-        <FilterSection title="Query Builder (Operations)" delay={0.25}>
-          <div className="space-y-3 pt-1">
-            <p className="text-[10px] text-slate-500">
-              Combine criteria with AND/OR operations
-            </p>
-
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-600">A</span>
-              <select
-                value={op12}
-                onChange={(e) => setOp12(e.target.value as any)}
-                className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value="OR">OR</option>
-                <option value="AND">AND</option>
-              </select>
-              <span className="text-xs text-slate-600">B</span>
-              <select
-                value={op23}
-                onChange={(e) => setOp23(e.target.value as any)}
-                className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value="OR">OR</option>
-                <option value="AND">AND</option>
-              </select>
-              <span className="text-xs text-slate-600">C</span>
-              <select
-                value={op34}
-                onChange={(e) => setOp34(e.target.value as any)}
-                className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value="OR">OR</option>
-                <option value="AND">AND</option>
-              </select>
-              <span className="text-xs text-slate-600">D</span>
-            </div>
-
-            <div className="text-[9px] text-slate-400 mt-2">
-              Current: A {op12} B {op23} C {op34} D
-            </div>
-          </div>
-        </FilterSection>
-          </div>
-          
-          <div className="flex items-center gap-3 pt-4 border-t">
-            <Button
-              onClick={handleClearFilters}
-              variant="outline"
-              className="flex-1"
-            >
-              Clear All
-            </Button>
-            <Button
-              onClick={() => {
-                handleScan();
-                setFilterModalOpen(false);
-              }}
-              disabled={isFetching}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-            >
-              {isFetching ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Run Scanner
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -138,6 +138,8 @@ const scannerRequestSchema = z.object({
       op34: z.enum(['AND', 'OR']).default('OR'),
     }).optional(),
   }).optional(),
+  responseMode: z.enum(['full', 'summary']).optional(),
+  maxRows: z.number().int().min(1).max(5000).optional(),
 });
 
 const scenarioRequestSchema = z.object({
@@ -150,6 +152,74 @@ const scenarioRequestSchema = z.object({
   entryDay: z.enum(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']),
   exitDay: z.enum(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']),
   returnType: z.enum(['Percent', 'Points']).default('Percent'),
+});
+
+const basketLookupBaseSchema = z.object({
+  basketGroupId: z.number().int().positive().optional(),
+  basketGroup: z.string().min(1).optional(),
+  startDate: dateSchema,
+  endDate: dateSchema,
+});
+
+const requireBasketLookup = (value, ctx) => {
+  if (!value.basketGroupId && !value.basketGroup) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Either basketGroupId or basketGroup is required',
+      path: ['basketGroupId'],
+    });
+  }
+};
+
+const basketCalendarSchema = basketLookupBaseSchema.extend({
+  month: z.enum(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']),
+  calendarDay: z.number().int().min(1).max(31).default(10),
+  holdingPeriod: z.number().int().min(1).max(31).default(10),
+  trendType: z.enum(['Any', 'Bullish', 'Bearish']).default('Any'),
+  riskFreeInterestRate: z.number().min(0).max(100).default(7),
+  topRanks: z.number().int().min(0).max(500).default(10),
+  sortFirstBy: z.enum(['AvgPnl', 'WinnerPct']).default('AvgPnl'),
+}).superRefine(requireBasketLookup);
+
+const basketTradingSchema = basketLookupBaseSchema.extend({
+  month: z.enum(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']),
+  tradingDay: z.number().int().min(1).max(31).default(10),
+  holdingPeriod: z.number().int().min(1).max(31).default(10),
+  trendType: z.enum(['Any', 'Bullish', 'Bearish']).default('Any'),
+  riskFreeInterestRate: z.number().min(0).max(100).default(7),
+  topRanks: z.number().int().min(0).max(500).default(10),
+  sortFirstBy: z.enum(['AvgPnl', 'WinnerPct']).default('AvgPnl'),
+}).superRefine(requireBasketLookup);
+
+const basketBestMonthlySchema = basketLookupBaseSchema.extend({
+  monthName: z.enum(['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']),
+  rankType: z.enum(['Bullish', 'Bearish']).default('Bullish'),
+  intervalGapRange: z.number().int().min(1).max(31).default(10),
+  totalReturns: z.number().int().min(1).max(100).default(2),
+}).superRefine(requireBasketLookup);
+
+const basketGroupCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional().nullable(),
+  symbols: z.array(z.string().min(1)).min(1).max(50),
+});
+
+const basketGroupUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional().nullable(),
+  symbols: z.array(z.string().min(1)).min(1).max(50).optional(),
+}).superRefine((value, ctx) => {
+  if (value.name === undefined && value.description === undefined && value.symbols === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'At least one field is required',
+      path: ['name'],
+    });
+  }
+});
+
+const basketGroupParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
 });
 
 // =====================================================
@@ -212,6 +282,12 @@ module.exports = {
   yearlyAnalysisSchema,
   scannerRequestSchema,
   scenarioRequestSchema,
+  basketCalendarSchema,
+  basketTradingSchema,
+  basketBestMonthlySchema,
+  basketGroupCreateSchema,
+  basketGroupUpdateSchema,
+  basketGroupParamsSchema,
   registerSchema,
   loginSchema,
   paginationSchema,

@@ -13,8 +13,20 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const { logger } = require('../utils/logger');
 const { authenticateToken } = require('../middleware/auth');
+const {
+  validate,
+  scannerRequestSchema,
+  basketCalendarSchema,
+  basketTradingSchema,
+  basketBestMonthlySchema,
+  basketGroupCreateSchema,
+  basketGroupUpdateSchema,
+  basketGroupParamsSchema
+} = require('../middleware/validation');
 const { NotFoundError } = require('../utils/errors');
 const AnalysisService = require('../services/AnalysisService');
+const BasketAnalysisService = require('../services/BasketAnalysisService');
+const PermissionService = require('../services/PermissionService');
 
 /**
  * GET /analysis/symbols
@@ -1049,6 +1061,7 @@ router.post('/cache/clear',
  */
 router.post('/scanner',
   authenticateToken,
+  validate(scannerRequestSchema),
   async (req, res, next) => {
     try {
       const {
@@ -1058,7 +1071,9 @@ router.post('/scanner',
         filters = {},
         trendType = 'Bullish',
         consecutiveDays = 3,
-        criteria = {}
+        criteria = {},
+        responseMode = 'full',
+        maxRows = null
       } = req.body;
 
       logger.info('Scanner request received', {
@@ -1077,7 +1092,9 @@ router.post('/scanner',
         filters,
         trendType,
         consecutiveDays,
-        criteria
+        criteria,
+        responseMode,
+        maxRows
       });
 
       res.json({
@@ -1086,6 +1103,269 @@ router.post('/scanner',
       });
     } catch (error) {
       logger.error('Scanner error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /analysis/backtest/phenomena
+ * Phenomena Backtester - Backtest trading based on phenomena days
+ */
+router.post('/backtest/phenomena',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const {
+        symbol,
+        startDate,
+        endDate,
+        evenOddYears = 'All',
+        specificMonth = null,
+        specificExpiryWeek = null,
+        specificMondayWeek = null,
+        initialCapital = 10000000,
+        riskFreeRate = 5.4,
+        tradeType = 'longTrades',
+        brokerage = 0.04,
+        phenomenaDaysStart = -5,
+        phenomenaDaysEnd = 2,
+        queryWeekdays = [],
+        queryTradingDays = [],
+        queryCalendarDays = [],
+        heatmapType = 'TradingMonthDaysVsWeekdays',
+        showAnnotation = false,
+        inSampleStart,
+        inSampleEnd,
+        outSampleStart,
+        outSampleEnd,
+        walkForwardType = 'CalenderYearDay',
+        walkForwardSymbols = [],
+        includeTradeList = true,
+        maxRows = null,
+        responseMode = 'full'
+      } = req.body;
+
+      logger.info('Phenomena Backtest request received', {
+        symbol,
+        startDate,
+        endDate,
+        evenOddYears,
+        specificMonth,
+        phenomenaDaysStart,
+        phenomenaDaysEnd,
+        tradeType
+      });
+
+      const result = await AnalysisService.backtestPhenomena({
+        symbol,
+        startDate,
+        endDate,
+        evenOddYears,
+        specificMonth,
+        specificExpiryWeek,
+        specificMondayWeek,
+        initialCapital,
+        riskFreeRate,
+        tradeType,
+        brokerage,
+        phenomenaDaysStart,
+        phenomenaDaysEnd,
+        queryWeekdays,
+        queryTradingDays,
+        queryCalendarDays,
+        heatmapType,
+        showAnnotation,
+        inSampleStart,
+        inSampleEnd,
+        outSampleStart,
+        outSampleEnd,
+        walkForwardType,
+        walkForwardSymbols,
+        includeTradeList,
+        maxRows,
+        responseMode
+      });
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Phenomena Backtest error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /analysis/basket/groups
+ * Basket group list for basket analysis
+ */
+router.get('/basket/groups',
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const groups = await BasketAnalysisService.getAccessibleBasketGroups(req.user.id);
+      res.json({
+        success: true,
+        data: groups
+      });
+    } catch (error) {
+      logger.error('Basket groups error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /analysis/basket/groups
+ * Create user basket
+ */
+router.post('/basket/groups',
+  authenticateToken,
+  validate(basketGroupCreateSchema),
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const created = await BasketAnalysisService.createBasketGroup({
+        userId: req.user.id,
+        ...req.body,
+      });
+      res.status(201).json({
+        success: true,
+        data: created,
+      });
+    } catch (error) {
+      logger.error('Basket create error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * PATCH /analysis/basket/groups/:id
+ * Update user basket
+ */
+router.patch('/basket/groups/:id',
+  authenticateToken,
+  validate(basketGroupParamsSchema, 'params'),
+  validate(basketGroupUpdateSchema),
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const updated = await BasketAnalysisService.updateBasketGroup({
+        userId: req.user.id,
+        basketGroupId: Number(req.params.id),
+        ...req.body,
+      });
+      res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (error) {
+      logger.error('Basket update error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * DELETE /analysis/basket/groups/:id
+ * Delete user basket
+ */
+router.delete('/basket/groups/:id',
+  authenticateToken,
+  validate(basketGroupParamsSchema, 'params'),
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const result = await BasketAnalysisService.deleteBasketGroup({
+        userId: req.user.id,
+        basketGroupId: Number(req.params.id),
+      });
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      logger.error('Basket delete error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /analysis/basket/calendar-day
+ * Calendar day basket ranking
+ */
+router.post('/basket/calendar-day',
+  authenticateToken,
+  validate(basketCalendarSchema),
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const result = await BasketAnalysisService.calendarDayAnalysis({
+        ...req.body,
+        userId: req.user.id,
+      });
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Basket calendar-day error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /analysis/basket/trading-day
+ * Trading day basket ranking
+ */
+router.post('/basket/trading-day',
+  authenticateToken,
+  validate(basketTradingSchema),
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const result = await BasketAnalysisService.tradingDayAnalysis({
+        ...req.body,
+        userId: req.user.id,
+      });
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Basket trading-day error', { error: error.message });
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /analysis/basket/best-monthly-returns
+ * Best monthly return intervals across basket symbols
+ */
+router.post('/basket/best-monthly-returns',
+  authenticateToken,
+  validate(basketBestMonthlySchema),
+  async (req, res, next) => {
+    try {
+      PermissionService.validateAccess(req.user, 'analysis:basket', 'basket');
+      const result = await BasketAnalysisService.bestMonthlyReturns({
+        ...req.body,
+        userId: req.user.id,
+      });
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Basket best-monthly-returns error', { error: error.message });
       next(error);
     }
   }
