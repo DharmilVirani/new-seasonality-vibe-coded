@@ -342,7 +342,7 @@ class BasketAnalysisService {
 
   async fetchSymbolDailyRows(symbols, startDate, endDate) {
     const tickers = await prisma.ticker.findMany({
-      where: { symbol: { in: symbols }, isActive: true },
+      where: { symbol: { in: symbols } },
       select: { id: true, symbol: true },
     });
 
@@ -430,7 +430,7 @@ class BasketAnalysisService {
       const losers = yearlyReturns.filter((v) => v < 0).length;
       const winnersPct = (winners * 100) / yearlyReturns.length;
       const losersPct = (losers * 100) / yearlyReturns.length;
-      const maxValue = Math.max(...yearlyReturns);
+      const maxValue = Math.max(...yearlyReturns);  
       const minValue = Math.min(...yearlyReturns);
 
       resultRows.push({
@@ -664,8 +664,13 @@ class BasketAnalysisService {
     for (const sort of sorts) {
       const av = a[sort.key];
       const bv = b[sort.key];
-      const an = av === null || av === undefined ? Number.POSITIVE_INFINITY : Number(av);
-      const bn = bv === null || bv === undefined ? Number.POSITIVE_INFINITY : Number(bv);
+      const aMissing = av === null || av === undefined || Number.isNaN(Number(av));
+      const bMissing = bv === null || bv === undefined || Number.isNaN(Number(bv));
+      if (aMissing && bMissing) continue;
+      if (aMissing) return 1; // pandas-like behavior: keep missing values last for both asc/desc
+      if (bMissing) return -1;
+      const an = Number(av);
+      const bn = Number(bv);
       if (an === bn) continue;
       if (sort.dir === 'asc') return an - bn;
       return bn - an;
